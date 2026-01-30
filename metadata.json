@@ -1,0 +1,7 @@
+{
+  "name": "DuoVoice Live - Backup (before further refinement)",
+  "description": "A real-time bilingual voice translator for couples, bridging English and Portuguese conversations seamlessly.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
