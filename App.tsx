@@ -7,7 +7,7 @@ import ChatMessage from './components/ChatMessage';
 import Sidebar from './components/Sidebar';
 
 // --- Constants ---
-const MODEL_NAME = 'gemini-2.5-flash-native-audio-preview-09-2025';
+const MODEL_NAME = 'gemini-2.5-flash-native-audio-preview-12-2025';
 const SYSTEM_INSTRUCTION = `You are a highly skilled bilingual interpreter for English and Portuguese.
 
 Your Goal: Provide accurate, natural, and real-time translation between the two languages.
