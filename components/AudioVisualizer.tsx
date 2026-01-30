@@ -13,27 +13,38 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ analyser, isActive, c
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    
+
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Set canvas size
     const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    ctx.scale(dpr, dpr);
+
+    // Size the canvas to match its CSS layout size, accounting for device pixel ratio
+    let width = 0;
+    let height = 0;
+    function resizeCanvas() {
+      const rect = canvas!.getBoundingClientRect();
+      width = rect.width;
+      height = rect.height;
+      canvas!.width = width * dpr;
+      canvas!.height = height * dpr;
+      ctx!.scale(dpr, dpr);
+    }
+    resizeCanvas();
+
+    // Re-measure whenever the element changes size (e.g. window resize, orientation change)
+    const resizeObserver = new ResizeObserver(() => resizeCanvas());
+    resizeObserver.observe(canvas);
 
     const bufferLength = analyser ? analyser.frequencyBinCount : 0;
     const dataArray = analyser ? new Uint8Array(bufferLength) : new Uint8Array(0);
 
     const render = () => {
       if (!isActive || !analyser) {
-        ctx.clearRect(0, 0, rect.width, rect.height);
-        // Draw a flat line if inactive
+        ctx.clearRect(0, 0, width, height);
         ctx.beginPath();
-        ctx.moveTo(0, rect.height / 2);
-        ctx.lineTo(rect.width, rect.height / 2);
+        ctx.moveTo(0, height / 2);
+        ctx.lineTo(width, height / 2);
         ctx.strokeStyle = '#334155';
         ctx.lineWidth = 2;
         ctx.stroke();
@@ -41,28 +52,20 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ analyser, isActive, c
       }
 
       analyser.getByteFrequencyData(dataArray);
+      ctx.clearRect(0, 0, width, height);
 
-      ctx.clearRect(0, 0, rect.width, rect.height);
-      
-      const barWidth = (rect.width / bufferLength) * 2.5;
+      const barWidth = (width / bufferLength) * 2.5;
       let barHeight;
       let x = 0;
-
-      // Center the visualizer logic slightly
-      const centerY = rect.height / 2;
+      const centerY = height / 2;
 
       for (let i = 0; i < bufferLength; i++) {
-        barHeight = dataArray[i] / 2; // Scale down
-
-        // Symmetric mirroring for a cool voice effect
+        barHeight = dataArray[i] / 2;
         ctx.fillStyle = color;
-        
-        // Top bar
         ctx.fillRect(x, centerY - barHeight / 2, barWidth, barHeight);
-        
         x += barWidth + 1;
       }
-      
+
       animationRef.current = requestAnimationFrame(render);
     };
 
@@ -72,6 +75,7 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ analyser, isActive, c
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
+      resizeObserver.disconnect();
     };
   }, [analyser, isActive, color]);
 

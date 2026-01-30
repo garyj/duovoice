@@ -27,6 +27,12 @@ Input: "Hello, how are you?" -> Output: "Olá, como vai você?"
 Input: "Estou bem, obrigado." -> Output: "I am fine, thanks."
 `;
 
+// Simple counter to guarantee unique message IDs even within the same millisecond
+let messageIdCounter = 0;
+function nextMessageId(suffix: string): string {
+  return `${Date.now()}-${++messageIdCounter}-${suffix}`;
+}
+
 const createNewSessionObj = (): ChatSession => ({
   id: Date.now().toString(),
   title: 'New Conversation',
@@ -49,7 +55,8 @@ export default function App() {
   const outputAnalyserRef = useRef<AnalyserNode | null>(null);
   const inputSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const outputGainRef = useRef<GainNode | null>(null);
-  const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
   
   const [inputAnalyser, setInputAnalyser] = useState<AnalyserNode | null>(null);
   const [outputAnalyser, setOutputAnalyser] = useState<AnalyserNode | null>(null);
@@ -94,8 +101,14 @@ export default function App() {
     });
     audioSourcesRef.current.clear();
 
+    // Stop all microphone tracks so the browser mic indicator turns off
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      mediaStreamRef.current = null;
+    }
+
     try { inputSourceRef.current?.disconnect(); } catch(e) {}
-    try { scriptProcessorRef.current?.disconnect(); } catch(e) {}
+    try { workletNodeRef.current?.disconnect(); } catch(e) {}
     try { outputGainRef.current?.disconnect(); } catch(e) {}
     
     if (inputContextRef.current && inputContextRef.current.state !== 'closed') {
@@ -108,7 +121,7 @@ export default function App() {
     inputContextRef.current = null;
     outputContextRef.current = null;
     inputSourceRef.current = null;
-    scriptProcessorRef.current = null;
+    workletNodeRef.current = null;
     outputGainRef.current = null;
     inputAnalyserRef.current = null;
     outputAnalyserRef.current = null;
@@ -156,14 +169,18 @@ export default function App() {
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
       inputSourceRef.current = inputContextRef.current.createMediaStreamSource(stream);
       inputAnalyserRef.current = inputContextRef.current.createAnalyser();
       inputAnalyserRef.current.fftSize = 256;
-      scriptProcessorRef.current = inputContextRef.current.createScriptProcessor(4096, 1, 1);
-      
+
+      // Load the AudioWorklet processor (runs audio capture in its own thread)
+      await inputContextRef.current.audioWorklet.addModule('/audio-processor.js');
+      workletNodeRef.current = new AudioWorkletNode(inputContextRef.current, 'audio-capture-processor');
+
       inputSourceRef.current.connect(inputAnalyserRef.current);
-      inputAnalyserRef.current.connect(scriptProcessorRef.current);
-      scriptProcessorRef.current.connect(inputContextRef.current.destination);
+      inputAnalyserRef.current.connect(workletNodeRef.current);
+      workletNodeRef.current.connect(inputContextRef.current.destination);
       setInputAnalyser(inputAnalyserRef.current);
 
       outputAnalyserRef.current = outputContextRef.current.createAnalyser();
@@ -224,7 +241,7 @@ export default function App() {
                  setMessages(prev => {
                     const filtered = prev.filter(m => m.id !== 'user-partial');
                     return [...filtered, {
-                      id: Date.now() + '-user',
+                      id: nextMessageId('user'),
                       role: 'user',
                       text: finalText,
                       timestamp: new Date(),
@@ -238,7 +255,7 @@ export default function App() {
                   setMessages(prev => {
                     const filtered = prev.filter(m => m.id !== 'model-partial');
                     return [...filtered, {
-                      id: Date.now() + '-model',
+                      id: nextMessageId('model'),
                       role: 'model',
                       text: finalText,
                       timestamp: new Date(),
@@ -304,20 +321,20 @@ export default function App() {
       sessionPromiseRef.current = ai.live.connect(config);
       await sessionPromiseRef.current;
 
-      if (scriptProcessorRef.current) {
-        scriptProcessorRef.current.onaudioprocess = (e) => {
+      // Listen for audio chunks from the worklet and send them to Gemini
+      if (workletNodeRef.current) {
+        workletNodeRef.current.port.onmessage = (event) => {
           if (!shouldBeConnectedRef.current || !isSessionActiveRef.current) return;
-          
-          const inputData = e.inputBuffer.getChannelData(0);
+
+          const audioData: Float32Array = event.data.audioData;
           const currentSampleRate = inputContextRef.current?.sampleRate || 16000;
-          const blob = createPcmBlob(inputData, currentSampleRate);
-          
+          const blob = createPcmBlob(audioData, currentSampleRate);
+
           if (sessionPromiseRef.current) {
             sessionPromiseRef.current.then(session => {
               if (isSessionActiveRef.current && session && typeof session.sendRealtimeInput === 'function') {
                 try {
                   const sendPromise = session.sendRealtimeInput({ media: blob });
-                  // Safely handle the returned promise if it exists
                   if (sendPromise && typeof sendPromise.catch === 'function') {
                     sendPromise.catch((err: any) => {
                       console.warn("Realtime send failed asynchronously:", err);
@@ -328,7 +345,7 @@ export default function App() {
                 }
               }
             }).catch(err => {
-              console.warn("Session promise resolution failed in onaudioprocess:", err);
+              console.warn("Session promise resolution failed:", err);
             });
           }
         };

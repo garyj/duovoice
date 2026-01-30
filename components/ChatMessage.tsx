@@ -21,7 +21,7 @@ const ChatMessage: React.FC<ChatMessageProps> = memo(({ message }) => {
       >
         <p>{message.text}</p>
         <span className="text-[10px] opacity-50 mt-1 block text-right">
-          {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </span>
       </div>
     </div>
