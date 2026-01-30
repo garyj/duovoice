@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { ConnectionState, Message, ChatSession } from './types';
-import { createPcmBlob, decodeAudioData, decodeBase64 } from './utils/audioUtils';
+import { encodeBase64, decodeAudioData, decodeBase64 } from './utils/audioUtils';
 import AudioVisualizer from './components/AudioVisualizer';
 import ChatMessage from './components/ChatMessage';
 import Sidebar from './components/Sidebar';
@@ -27,6 +27,9 @@ Input: "Hello, how are you?" -> Output: "Olá, como vai você?"
 Input: "Estou bem, obrigado." -> Output: "I am fine, thanks."
 `;
 
+const HEALTH_CHECK_INTERVAL_MS = 5000;
+const HEALTH_TIMEOUT_MS = 15000;
+
 // Simple counter to guarantee unique message IDs even within the same millisecond
 let messageIdCounter = 0;
 function nextMessageId(suffix: string): string {
@@ -40,6 +43,18 @@ const createNewSessionObj = (): ChatSession => ({
   messages: []
 });
 
+/** Update a partial transcription DOM element without triggering React re-renders */
+function updatePartialEl(el: HTMLDivElement | null, text: string) {
+  if (!el) return;
+  const p = el.querySelector('p');
+  if (p) p.textContent = text;
+  if (text) {
+    el.classList.remove('hidden');
+  } else {
+    el.classList.add('hidden');
+  }
+}
+
 export default function App() {
   // --- State ---
   const [connectionState, setConnectionState] = useState<ConnectionState>(ConnectionState.DISCONNECTED);
@@ -48,7 +63,8 @@ export default function App() {
   const [sessions, setSessions] = useState<ChatSession[]>([createNewSessionObj()]);
   const [currentSessionId, setCurrentSessionId] = useState<string>(sessions[0].id);
   const [messages, setMessages] = useState<Message[]>([]);
-  
+
+  // Audio pipeline refs (persist across Gemini reconnects)
   const inputContextRef = useRef<AudioContext | null>(null);
   const outputContextRef = useRef<AudioContext | null>(null);
   const inputAnalyserRef = useRef<AnalyserNode | null>(null);
@@ -57,28 +73,47 @@ export default function App() {
   const outputGainRef = useRef<GainNode | null>(null);
   const workletNodeRef = useRef<AudioWorkletNode | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
-  
+
   const [inputAnalyser, setInputAnalyser] = useState<AnalyserNode | null>(null);
   const [outputAnalyser, setOutputAnalyser] = useState<AnalyserNode | null>(null);
 
+  // Gemini session refs
   const sessionPromiseRef = useRef<Promise<any> | null>(null);
+  const resolvedSessionRef = useRef<any>(null);
   const shouldBeConnectedRef = useRef<boolean>(false);
   const isSessionActiveRef = useRef<boolean>(false);
   const connectRef = useRef<() => Promise<void>>(null);
+  const connectGeminiRef = useRef<() => Promise<void>>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
 
+  // Audio playback refs
   const nextStartTimeRef = useRef<number>(0);
   const audioSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
+
+  // Partial transcription refs (DOM-based to avoid React re-renders)
   const currentInputTransRef = useRef<string>('');
   const currentOutputTransRef = useRef<string>('');
+  const partialUserElRef = useRef<HTMLDivElement>(null);
+  const partialModelElRef = useRef<HTMLDivElement>(null);
+
+  // Health monitoring
+  const lastGeminiResponseRef = useRef<number>(0);
+  const healthCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, []);
 
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, scrollToBottom]);
+
+  // Sync messages to sessions only when messages state changes
+  // (partials update DOM directly and don't trigger this)
   useEffect(() => {
     setSessions(prev => prev.map(session => {
       if (session.id === currentSessionId) {
@@ -95,13 +130,12 @@ export default function App() {
     }));
   }, [messages, currentSessionId]);
 
-  const cleanupAudio = useCallback(async () => {
+  const cleanupAudioPipeline = useCallback(async () => {
     audioSourcesRef.current.forEach(source => {
       try { source.stop(); } catch (e) {}
     });
     audioSourcesRef.current.clear();
 
-    // Stop all microphone tracks so the browser mic indicator turns off
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach(track => track.stop());
       mediaStreamRef.current = null;
@@ -110,14 +144,14 @@ export default function App() {
     try { inputSourceRef.current?.disconnect(); } catch(e) {}
     try { workletNodeRef.current?.disconnect(); } catch(e) {}
     try { outputGainRef.current?.disconnect(); } catch(e) {}
-    
+
     if (inputContextRef.current && inputContextRef.current.state !== 'closed') {
       try { await inputContextRef.current.close(); } catch(e) {}
     }
     if (outputContextRef.current && outputContextRef.current.state !== 'closed') {
       try { await outputContextRef.current.close(); } catch(e) {}
     }
-    
+
     inputContextRef.current = null;
     outputContextRef.current = null;
     inputSourceRef.current = null;
@@ -125,72 +159,74 @@ export default function App() {
     outputGainRef.current = null;
     inputAnalyserRef.current = null;
     outputAnalyserRef.current = null;
-    
+
     setInputAnalyser(null);
     setOutputAnalyser(null);
     nextStartTimeRef.current = 0;
   }, []);
 
-  const disconnect = useCallback(async () => {
-    shouldBeConnectedRef.current = false;
-    isSessionActiveRef.current = false;
-    setConnectionState(ConnectionState.DISCONNECTED);
-    
-    if (reconnectTimeoutRef.current) {
-      window.clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-    
+  const cleanupGeminiSession = useCallback(() => {
     sessionPromiseRef.current = null;
-    await cleanupAudio();
-  }, [cleanupAudio]);
+    resolvedSessionRef.current = null;
+    isSessionActiveRef.current = false;
+    lastGeminiResponseRef.current = 0;
 
-  const connect = useCallback(async () => {
-    if (reconnectTimeoutRef.current) {
-      window.clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
+    if (healthCheckIntervalRef.current) {
+      clearInterval(healthCheckIntervalRef.current);
+      healthCheckIntervalRef.current = null;
+    }
+  }, []);
+
+  /** Set up mic capture, AudioWorklet, and output graph. Called once per connect. */
+  const setupAudioPipeline = useCallback(async () => {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    inputContextRef.current = new AudioContextClass();
+    outputContextRef.current = new AudioContextClass({ sampleRate: 24000 });
+
+    if (inputContextRef.current.state === 'suspended') {
+      await inputContextRef.current.resume();
+    }
+    if (outputContextRef.current.state === 'suspended') {
+      await outputContextRef.current.resume();
     }
 
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        sampleRate: { ideal: 16000 },
+        channelCount: 1,
+      }
+    });
+    mediaStreamRef.current = stream;
+    inputSourceRef.current = inputContextRef.current.createMediaStreamSource(stream);
+    inputAnalyserRef.current = inputContextRef.current.createAnalyser();
+    inputAnalyserRef.current.fftSize = 256;
+
+    await inputContextRef.current.audioWorklet.addModule('/audio-processor.js');
+    workletNodeRef.current = new AudioWorkletNode(inputContextRef.current, 'audio-capture-processor');
+
+    inputSourceRef.current.connect(inputAnalyserRef.current);
+    inputAnalyserRef.current.connect(workletNodeRef.current);
+    workletNodeRef.current.connect(inputContextRef.current.destination);
+    setInputAnalyser(inputAnalyserRef.current);
+
+    outputAnalyserRef.current = outputContextRef.current.createAnalyser();
+    outputAnalyserRef.current.fftSize = 256;
+    outputGainRef.current = outputContextRef.current.createGain();
+    outputGainRef.current.gain.value = 1.0;
+    outputAnalyserRef.current.connect(outputGainRef.current);
+    outputGainRef.current.connect(outputContextRef.current.destination);
+    setOutputAnalyser(outputAnalyserRef.current);
+  }, []);
+
+  /** Connect (or reconnect) to Gemini and wire audio sending. */
+  const connectGemini = useCallback(async () => {
+    cleanupGeminiSession();
     setError(null);
-    setConnectionState(ConnectionState.CONNECTING);
-    shouldBeConnectedRef.current = true;
-    isSessionActiveRef.current = false;
 
     try {
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-      inputContextRef.current = new AudioContextClass();
-      outputContextRef.current = new AudioContextClass({ sampleRate: 24000 });
-      
-      if (inputContextRef.current.state === 'suspended') {
-        await inputContextRef.current.resume();
-      }
-      if (outputContextRef.current.state === 'suspended') {
-        await outputContextRef.current.resume();
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaStreamRef.current = stream;
-      inputSourceRef.current = inputContextRef.current.createMediaStreamSource(stream);
-      inputAnalyserRef.current = inputContextRef.current.createAnalyser();
-      inputAnalyserRef.current.fftSize = 256;
-
-      // Load the AudioWorklet processor (runs audio capture in its own thread)
-      await inputContextRef.current.audioWorklet.addModule('/audio-processor.js');
-      workletNodeRef.current = new AudioWorkletNode(inputContextRef.current, 'audio-capture-processor');
-
-      inputSourceRef.current.connect(inputAnalyserRef.current);
-      inputAnalyserRef.current.connect(workletNodeRef.current);
-      workletNodeRef.current.connect(inputContextRef.current.destination);
-      setInputAnalyser(inputAnalyserRef.current);
-
-      outputAnalyserRef.current = outputContextRef.current.createAnalyser();
-      outputAnalyserRef.current.fftSize = 256;
-      outputGainRef.current = outputContextRef.current.createGain();
-      outputGainRef.current.gain.value = 1.0; 
-      outputAnalyserRef.current.connect(outputGainRef.current);
-      outputGainRef.current.connect(outputContextRef.current.destination);
-      setOutputAnalyser(outputAnalyserRef.current);
-
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const config = {
         model: MODEL_NAME,
@@ -201,71 +237,56 @@ export default function App() {
             isSessionActiveRef.current = true;
           },
           onmessage: async (message: LiveServerMessage) => {
+            lastGeminiResponseRef.current = Date.now();
+
+            // --- Partial transcriptions (DOM-only, no React re-renders) ---
             if (message.serverContent?.inputTranscription) {
               const text = message.serverContent.inputTranscription.text;
               if (text) {
                 currentInputTransRef.current += text;
-                setMessages(prev => {
-                   const filtered = prev.filter(m => !(m.role === 'user' && !m.isFinal));
-                   return [...filtered, {
-                     id: 'user-partial',
-                     role: 'user',
-                     text: currentInputTransRef.current,
-                     timestamp: new Date(),
-                     isFinal: false
-                   }];
-                });
+                updatePartialEl(partialUserElRef.current, currentInputTransRef.current);
+                scrollToBottom();
               }
             }
-            
+
             if (message.serverContent?.outputTranscription) {
               const text = message.serverContent.outputTranscription.text;
               if (text) {
                 currentOutputTransRef.current += text;
-                 setMessages(prev => {
-                   const filtered = prev.filter(m => !(m.role === 'model' && !m.isFinal));
-                   return [...filtered, {
-                     id: 'model-partial',
-                     role: 'model',
-                     text: currentOutputTransRef.current,
-                     timestamp: new Date(),
-                     isFinal: false
-                   }];
-                });
+                updatePartialEl(partialModelElRef.current, currentOutputTransRef.current);
+                scrollToBottom();
               }
             }
 
+            // --- Turn complete: commit final messages to React state ---
             if (message.serverContent?.turnComplete) {
                if (currentInputTransRef.current) {
                  const finalText = currentInputTransRef.current;
-                 setMessages(prev => {
-                    const filtered = prev.filter(m => m.id !== 'user-partial');
-                    return [...filtered, {
-                      id: nextMessageId('user'),
-                      role: 'user',
-                      text: finalText,
-                      timestamp: new Date(),
-                      isFinal: true
-                    }];
-                 });
+                 setMessages(prev => [...prev, {
+                   id: nextMessageId('user'),
+                   role: 'user',
+                   text: finalText,
+                   timestamp: new Date(),
+                   isFinal: true
+                 }]);
                  currentInputTransRef.current = '';
+                 updatePartialEl(partialUserElRef.current, '');
                }
                if (currentOutputTransRef.current) {
                   const finalText = currentOutputTransRef.current;
-                  setMessages(prev => {
-                    const filtered = prev.filter(m => m.id !== 'model-partial');
-                    return [...filtered, {
-                      id: nextMessageId('model'),
-                      role: 'model',
-                      text: finalText,
-                      timestamp: new Date(),
-                      isFinal: true
-                    }];
-                  });
+                  setMessages(prev => [...prev, {
+                    id: nextMessageId('model'),
+                    role: 'model',
+                    text: finalText,
+                    timestamp: new Date(),
+                    isFinal: true
+                  }]);
                   currentOutputTransRef.current = '';
+                  updatePartialEl(partialModelElRef.current, '');
                }
             }
 
+            // --- Audio playback ---
             const audioBase64 = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (audioBase64 && outputContextRef.current && outputAnalyserRef.current) {
               const ctx = outputContextRef.current;
@@ -281,12 +302,13 @@ export default function App() {
               audioSourcesRef.current.add(source);
             }
 
+            // --- Interruption ---
             if (message.serverContent?.interrupted) {
               audioSourcesRef.current.forEach(s => { try { s.stop(); } catch(e) {} });
               audioSourcesRef.current.clear();
               nextStartTimeRef.current = 0;
               currentOutputTransRef.current = '';
-              setMessages(prev => prev.filter(m => m.id !== 'model-partial'));
+              updatePartialEl(partialModelElRef.current, '');
             }
           },
           onerror: (e: ErrorEvent) => {
@@ -295,11 +317,16 @@ export default function App() {
           onclose: (e: CloseEvent) => {
             console.log("Session Closed", e);
             isSessionActiveRef.current = false;
+            resolvedSessionRef.current = null;
             if (shouldBeConnectedRef.current) {
               setConnectionState(ConnectionState.CONNECTING);
               reconnectTimeoutRef.current = window.setTimeout(() => {
-                if (shouldBeConnectedRef.current && connectRef.current) {
-                   connectRef.current();
+                if (!shouldBeConnectedRef.current) return;
+                // If audio pipeline is still alive, only reconnect Gemini (fast path)
+                if (inputContextRef.current && inputContextRef.current.state !== 'closed') {
+                  connectGeminiRef.current?.();
+                } else {
+                  connectRef.current?.();
                 }
               }, 2000);
             } else {
@@ -319,50 +346,111 @@ export default function App() {
       };
 
       sessionPromiseRef.current = ai.live.connect(config);
-      await sessionPromiseRef.current;
+      const session = await sessionPromiseRef.current;
+      resolvedSessionRef.current = session;
 
-      // Listen for audio chunks from the worklet and send them to Gemini
+      // Wire worklet audio output to Gemini session.
+      // The worklet posts ready-to-encode Int16 PCM data.
       if (workletNodeRef.current) {
         workletNodeRef.current.port.onmessage = (event) => {
           if (!shouldBeConnectedRef.current || !isSessionActiveRef.current) return;
 
-          const audioData: Float32Array = event.data.audioData;
-          const currentSampleRate = inputContextRef.current?.sampleRate || 16000;
-          const blob = createPcmBlob(audioData, currentSampleRate);
+          const pcmData: Uint8Array = event.data.pcmData;
+          const base64Data = encodeBase64(pcmData);
 
-          if (sessionPromiseRef.current) {
-            sessionPromiseRef.current.then(session => {
-              if (isSessionActiveRef.current && session && typeof session.sendRealtimeInput === 'function') {
-                try {
-                  const sendPromise = session.sendRealtimeInput({ media: blob });
-                  if (sendPromise && typeof sendPromise.catch === 'function') {
-                    sendPromise.catch((err: any) => {
-                      console.warn("Realtime send failed asynchronously:", err);
-                    });
-                  }
-                } catch (sendErr) {
-                  console.warn("Immediate send failed:", sendErr);
-                }
+          const session = resolvedSessionRef.current;
+          if (session && typeof session.sendRealtimeInput === 'function') {
+            try {
+              const p = session.sendRealtimeInput({
+                media: { data: base64Data, mimeType: "audio/pcm;rate=16000" }
+              });
+              if (p && typeof p.catch === 'function') {
+                p.catch((err: any) => console.warn("Realtime send failed:", err));
               }
-            }).catch(err => {
-              console.warn("Session promise resolution failed:", err);
-            });
+            } catch (sendErr) {
+              console.warn("Immediate send failed:", sendErr);
+            }
           }
         };
       }
+
+      // Start connection health monitoring
+      healthCheckIntervalRef.current = setInterval(() => {
+        if (!isSessionActiveRef.current || !shouldBeConnectedRef.current) return;
+        const elapsed = Date.now() - lastGeminiResponseRef.current;
+        if (lastGeminiResponseRef.current > 0 && elapsed > HEALTH_TIMEOUT_MS) {
+          console.warn(`No Gemini response for ${HEALTH_TIMEOUT_MS / 1000}s, reconnecting...`);
+          lastGeminiResponseRef.current = 0;
+          // Trigger reconnect via the Gemini-only path
+          isSessionActiveRef.current = false;
+          if (inputContextRef.current && inputContextRef.current.state !== 'closed') {
+            connectGeminiRef.current?.();
+          } else {
+            connectRef.current?.();
+          }
+        }
+      }, HEALTH_CHECK_INTERVAL_MS);
+
+    } catch (err: any) {
+      console.error("Gemini connection error:", err);
+      setError(err.message || "Failed to connect to Gemini.");
+      setConnectionState(ConnectionState.ERROR);
+      isSessionActiveRef.current = false;
+    }
+  }, [cleanupGeminiSession, scrollToBottom]);
+
+  /** Full connect: set up audio pipeline then connect Gemini. */
+  const connect = useCallback(async () => {
+    if (reconnectTimeoutRef.current) {
+      window.clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
+    setError(null);
+    setConnectionState(ConnectionState.CONNECTING);
+    shouldBeConnectedRef.current = true;
+
+    try {
+      await setupAudioPipeline();
+      await connectGemini();
     } catch (err: any) {
       console.error("Connection flow error:", err);
       setError(err.message || "Failed to connect. Check permissions and network.");
       setConnectionState(ConnectionState.ERROR);
-      cleanupAudio();
+      cleanupGeminiSession();
+      await cleanupAudioPipeline();
       shouldBeConnectedRef.current = false;
       isSessionActiveRef.current = false;
     }
-  }, [cleanupAudio]);
+  }, [setupAudioPipeline, connectGemini, cleanupGeminiSession, cleanupAudioPipeline]);
 
+  const disconnect = useCallback(async () => {
+    shouldBeConnectedRef.current = false;
+    setConnectionState(ConnectionState.DISCONNECTED);
+
+    if (reconnectTimeoutRef.current) {
+      window.clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
+    cleanupGeminiSession();
+    await cleanupAudioPipeline();
+
+    // Clear any partial transcription DOM state
+    currentInputTransRef.current = '';
+    currentOutputTransRef.current = '';
+    updatePartialEl(partialUserElRef.current, '');
+    updatePartialEl(partialModelElRef.current, '');
+  }, [cleanupGeminiSession, cleanupAudioPipeline]);
+
+  // Keep stable refs for the onclose handler
   useEffect(() => {
     connectRef.current = connect;
   }, [connect]);
+
+  useEffect(() => {
+    connectGeminiRef.current = connectGemini;
+  }, [connectGemini]);
 
   const handleToggleConnection = () => {
     if (connectionState === ConnectionState.CONNECTED || connectionState === ConnectionState.CONNECTING) {
@@ -391,7 +479,7 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-slate-900 text-slate-100 overflow-hidden">
-      <Sidebar 
+      <Sidebar
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
         sessions={sessions}
@@ -410,8 +498,8 @@ export default function App() {
             </div>
             <h1 className="text-lg md:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-300 to-teal-200">DuoVoice Live</h1>
           </div>
-          <div className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-2 
-            ${connectionState === ConnectionState.CONNECTED ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30' : 
+          <div className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-2
+            ${connectionState === ConnectionState.CONNECTED ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30' :
               connectionState === ConnectionState.CONNECTING ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' :
               'bg-slate-700 text-slate-400 border border-slate-600'}`}>
             <span className={`w-2 h-2 rounded-full ${connectionState === ConnectionState.CONNECTED ? 'bg-teal-400 animate-pulse' : connectionState === ConnectionState.CONNECTING ? 'bg-yellow-400 animate-bounce' : 'bg-slate-500'}`}></span>
@@ -429,20 +517,35 @@ export default function App() {
           </div>
           <div className="flex-1 bg-slate-900 relative overflow-hidden flex flex-col">
             <div className="flex-1 overflow-y-auto p-4 pb-32 scroll-smooth" ref={scrollRef}>
-              {messages.length === 0 ? (
+              {messages.length === 0 && !currentInputTransRef.current && !currentOutputTransRef.current ? (
                 <div className="h-full flex flex-col items-center justify-center text-slate-500 opacity-60">
                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-16 h-16 mb-4"><path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" /></svg>
                    <p className="text-center px-4">Tap the microphone to start translating.<br/>New chats can be started from the sidebar.</p>
                 </div>
-              ) : messages.map((msg) => <ChatMessage key={msg.id} message={msg} />)}
+              ) : (
+                <>
+                  {messages.map((msg) => <ChatMessage key={msg.id} message={msg} />)}
+                  {/* Partial transcriptions updated via DOM refs — no React re-renders */}
+                  <div ref={partialUserElRef} className="flex w-full mb-4 justify-end hidden">
+                    <div className="max-w-[80%] px-4 py-3 rounded-2xl shadow-md text-sm md:text-base leading-relaxed bg-blue-600 text-white rounded-tr-none opacity-70 animate-pulse">
+                      <p></p>
+                    </div>
+                  </div>
+                  <div ref={partialModelElRef} className="flex w-full mb-4 justify-start hidden">
+                    <div className="max-w-[80%] px-4 py-3 rounded-2xl shadow-md text-sm md:text-base leading-relaxed bg-slate-700 text-slate-100 rounded-tl-none opacity-70 animate-pulse">
+                      <p></p>
+                    </div>
+                  </div>
+                </>
+              )}
               {error && <div className="bg-red-500/10 border border-red-500/50 text-red-200 p-4 rounded-lg m-4 text-center text-sm">{error}</div>}
             </div>
           </div>
           <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 flex items-center gap-6">
             <button onClick={handleToggleConnection}
               className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 shadow-2xl hover:scale-105 active:scale-95
-                ${connectionState === ConnectionState.CONNECTED ? 'bg-red-500 hover:bg-red-600 shadow-red-500/40' : 
-                  connectionState === ConnectionState.CONNECTING ? 'bg-yellow-500 shadow-yellow-500/40 animate-pulse' : 
+                ${connectionState === ConnectionState.CONNECTED ? 'bg-red-500 hover:bg-red-600 shadow-red-500/40' :
+                  connectionState === ConnectionState.CONNECTING ? 'bg-yellow-500 shadow-yellow-500/40 animate-pulse' :
                   'bg-teal-500 hover:bg-teal-600 shadow-teal-500/40 animate-pulse-slow'}`}
             >
               {connectionState === ConnectionState.CONNECTED ? (
