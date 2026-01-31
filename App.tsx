@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { GoogleGenAI, LiveServerMessage, Modality, EndSensitivity } from '@google/genai';
+import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { ConnectionState, Message, ChatSession } from './types';
 import { encodeBase64, decodeAudioData, decodeBase64 } from './utils/audioUtils';
 import AudioVisualizer from './components/AudioVisualizer';
@@ -29,7 +29,7 @@ Input: "Estou bem, obrigado." -> Output: "I am fine, thanks."
 
 const HEALTH_CHECK_INTERVAL_MS = 5000;
 const HEALTH_TIMEOUT_MS = 15000;
-const SILENCE_DURATION_MS = Number(process.env.SILENCE_DURATION_MS) || 1000;
+const SILENCE_DURATION_MS = Number(process.env.SILENCE_DURATION_MS) || 500;
 
 // Simple counter to guarantee unique message IDs even within the same millisecond
 let messageIdCounter = 0;
@@ -345,9 +345,12 @@ export default function App() {
            outputAudioTranscription: {},
            realtimeInputConfig: {
              automaticActivityDetection: {
-               endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_LOW,
                silenceDurationMs: SILENCE_DURATION_MS,
              }
+           },
+           contextWindowCompression: {
+             triggerTokens: 10240,
+             slidingWindow: { targetTokens: 5120 }
            }
         }
       };
