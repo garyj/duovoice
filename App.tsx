@@ -30,6 +30,7 @@ Input: "Estou bem, obrigado." -> Output: "I am fine, thanks."
 const HEALTH_CHECK_INTERVAL_MS = 5000;
 const HEALTH_TIMEOUT_MS = 15000;
 const SILENCE_DURATION_MS = Number(process.env.SILENCE_DURATION_MS) || 500;
+const LOW_LATENCY_SILENCE_MS = 250;
 
 // Simple counter to guarantee unique message IDs even within the same millisecond
 let messageIdCounter = 0;
@@ -64,6 +65,7 @@ export default function App() {
   const [sessions, setSessions] = useState<ChatSession[]>([createNewSessionObj()]);
   const [currentSessionId, setCurrentSessionId] = useState<string>(sessions[0].id);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [lowLatencyMode, setLowLatencyMode] = useState(false);
 
   // Audio pipeline refs (persist across Gemini reconnects)
   const inputContextRef = useRef<AudioContext | null>(null);
@@ -102,6 +104,7 @@ export default function App() {
   const healthCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const lowLatencyModeRef = useRef<boolean>(lowLatencyMode);
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) {
@@ -112,6 +115,10 @@ export default function App() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, scrollToBottom]);
+
+  useEffect(() => {
+    lowLatencyModeRef.current = lowLatencyMode;
+  }, [lowLatencyMode]);
 
   // Sync messages to sessions only when messages state changes
   // (partials update DOM directly and don't trigger this)
@@ -195,7 +202,7 @@ export default function App() {
       audio: {
         echoCancellation: true,
         noiseSuppression: true,
-        autoGainControl: true,
+        autoGainControl: !lowLatencyModeRef.current,
         sampleRate: { ideal: 16000 },
         channelCount: 1,
       }
@@ -228,6 +235,7 @@ export default function App() {
     setError(null);
 
     try {
+      const isLowLatency = lowLatencyModeRef.current;
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const config = {
         model: MODEL_NAME,
@@ -341,11 +349,10 @@ export default function App() {
            speechConfig: {
              voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
            },
-           inputAudioTranscription: {},
-           outputAudioTranscription: {},
+           ...(isLowLatency ? {} : { inputAudioTranscription: {}, outputAudioTranscription: {} }),
            realtimeInputConfig: {
              automaticActivityDetection: {
-               silenceDurationMs: SILENCE_DURATION_MS,
+               silenceDurationMs: isLowLatency ? LOW_LATENCY_SILENCE_MS : SILENCE_DURATION_MS,
              }
            },
            contextWindowCompression: {
@@ -470,6 +477,17 @@ export default function App() {
     }
   };
 
+  const handleToggleLowLatency = async () => {
+    const next = !lowLatencyModeRef.current;
+    lowLatencyModeRef.current = next;
+    setLowLatencyMode(next);
+
+    if (connectionState === ConnectionState.CONNECTED || connectionState === ConnectionState.CONNECTING) {
+      cleanupGeminiSession();
+      await connectGemini();
+    }
+  };
+
   const handleSwitchSession = (sessionId: string) => {
     if (connectionState === ConnectionState.CONNECTED) disconnect();
     const targetSession = sessions.find(s => s.id === sessionId);
@@ -508,12 +526,23 @@ export default function App() {
             </div>
             <h1 className="text-lg md:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-300 to-teal-200">DuoVoice Live</h1>
           </div>
-          <div className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-2
-            ${connectionState === ConnectionState.CONNECTED ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30' :
-              connectionState === ConnectionState.CONNECTING ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' :
-              'bg-slate-700 text-slate-400 border border-slate-600'}`}>
-            <span className={`w-2 h-2 rounded-full ${connectionState === ConnectionState.CONNECTED ? 'bg-teal-400 animate-pulse' : connectionState === ConnectionState.CONNECTING ? 'bg-yellow-400 animate-bounce' : 'bg-slate-500'}`}></span>
-            {connectionState === ConnectionState.CONNECTED ? 'LIVE' : connectionState === ConnectionState.CONNECTING ? 'CONNECTING' : 'OFFLINE'}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleToggleLowLatency}
+              aria-pressed={lowLatencyMode}
+              title="Low Latency disables transcription and shortens silence detection."
+              className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors
+                ${lowLatencyMode ? 'bg-teal-500/20 text-teal-200 border-teal-500/30' : 'bg-slate-700 text-slate-300 border-slate-600 hover:border-slate-500'}`}
+            >
+              Low Latency {lowLatencyMode ? 'ON' : 'OFF'}
+            </button>
+            <div className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-2
+              ${connectionState === ConnectionState.CONNECTED ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30' :
+                connectionState === ConnectionState.CONNECTING ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' :
+                'bg-slate-700 text-slate-400 border border-slate-600'}`}>
+              <span className={`w-2 h-2 rounded-full ${connectionState === ConnectionState.CONNECTED ? 'bg-teal-400 animate-pulse' : connectionState === ConnectionState.CONNECTING ? 'bg-yellow-400 animate-bounce' : 'bg-slate-500'}`}></span>
+              {connectionState === ConnectionState.CONNECTED ? 'LIVE' : connectionState === ConnectionState.CONNECTING ? 'CONNECTING' : 'OFFLINE'}
+            </div>
           </div>
         </header>
         <main className="flex-1 flex flex-col relative overflow-hidden">
