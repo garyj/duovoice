@@ -50,7 +50,7 @@ The app runs at `http://localhost:3000`.
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `GEMINI_API_KEY` | Yes | — | Your [Gemini API key](https://aistudio.google.com/apikey) |
-| `SILENCE_DURATION_MS` | No | `1000` | Milliseconds of silence before Gemini considers speech finished |
+| `SILENCE_DURATION_MS` | No | `500` | Milliseconds of silence before Gemini considers speech finished |
 
 ## Scripts
 
