@@ -2,11 +2,12 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { ConnectionState, Message, ChatSession } from './types';
 import { encodeBase64, decodeAudioData, decodeBase64 } from './utils/audioUtils';
-import { getGeminiKey, getOpenAiKey } from './utils/keyStore';
+import { getGeminiKey, getOpenAiKey, hasSeenSetupPrompt, markSetupPromptSeen } from './utils/keyStore';
 import AudioVisualizer from './components/AudioVisualizer';
 import ChatMessage from './components/ChatMessage';
 import Sidebar from './components/Sidebar';
 import SettingsPanel from './components/SettingsPanel';
+import SetupModal from './components/SetupModal';
 
 type Provider = 'gemini' | 'openai';
 
@@ -76,6 +77,7 @@ export default function App() {
   const [lowLatencyMode, setLowLatencyMode] = useState(false);
   const [provider, setProvider] = useState<Provider>('gemini');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [showSetupModal, setShowSetupModal] = useState(false);
 
   const resolveGeminiKey = () =>
     getGeminiKey() || process.env.GEMINI_API_KEY || process.env.API_KEY;
@@ -148,6 +150,13 @@ export default function App() {
   useEffect(() => {
     providerRef.current = provider;
   }, [provider]);
+
+  useEffect(() => {
+    if (!hasSeenSetupPrompt()) {
+      setShowSetupModal(true);
+      markSetupPromptSeen();
+    }
+  }, []);
 
   // Sync messages to sessions only when messages state changes
   // (partials update DOM directly and don't trigger this)
@@ -1041,6 +1050,14 @@ export default function App() {
             </div>
           </div>
         </header>
+        <SetupModal
+          isOpen={showSetupModal}
+          onClose={() => setShowSetupModal(false)}
+          onOpenSettings={() => {
+            setShowSetupModal(false);
+            setIsSettingsOpen(true);
+          }}
+        />
         <main className="flex-1 flex flex-col relative overflow-hidden">
           <div className="flex-none h-40 md:h-56 bg-gradient-to-b from-slate-900 to-slate-800 relative">
             <div className="absolute inset-0 opacity-80 mix-blend-screen"><AudioVisualizer analyser={inputAnalyser} isActive={connectionState === ConnectionState.CONNECTED} color="#f472b6" /></div>

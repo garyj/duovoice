@@ -1,6 +1,7 @@
 const STORAGE_KEYS = {
   gemini: 'duovoice.gemini_api_key',
   openai: 'duovoice.openai_api_key',
+  setupPromptSeen: 'duovoice.setup_prompt_seen',
 };
 
 let storageAvailable: boolean | null = null;
@@ -66,4 +67,14 @@ export function setOpenAiKey(value: string): void {
 
 export function clearOpenAiKey(): void {
   clearKey(STORAGE_KEYS.openai);
+}
+
+export function hasSeenSetupPrompt(): boolean {
+  if (!isStorageAvailable()) return false;
+  return window.localStorage.getItem(STORAGE_KEYS.setupPromptSeen) === 'true';
+}
+
+export function markSetupPromptSeen(): void {
+  if (!isStorageAvailable()) return;
+  window.localStorage.setItem(STORAGE_KEYS.setupPromptSeen, 'true');
 }
