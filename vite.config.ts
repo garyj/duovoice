@@ -14,6 +14,10 @@ export default defineConfig(({ mode }) => {
     define: {
       'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+      'process.env.OPENAI_API_KEY': JSON.stringify(env.OPENAI_API_KEY),
+      'process.env.OPENAI_REALTIME_MODEL': JSON.stringify(
+        env.OPENAI_REALTIME_MODEL,
+      ),
       'process.env.SILENCE_DURATION_MS': JSON.stringify(
         env.SILENCE_DURATION_MS,
       ),

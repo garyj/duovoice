@@ -1,7 +1,7 @@
 # DuoVoice Live
 
 Real-time bilingual voice translator for English and Portuguese conversations. Captures microphone audio, streams it to
-Google Gemini's native audio model, and plays back translated speech in real time.
+Google Gemini's native audio model (or OpenAI Realtime), and plays back translated speech in real time.
 
 Built for live use alongside phone calls, speak in one language, hear the translation instantly.
 
@@ -18,7 +18,7 @@ Microphone → AudioWorklet (16kHz PCM) → Gemini 2.5 Flash Native Audio → Tr
 
 ## Setup
 
-**Prerequisites:** Node.js, a [Gemini API key](https://aistudio.google.com/apikey)
+**Prerequisites:** Node.js, a [Gemini API key](https://aistudio.google.com/apikey) (and optionally an OpenAI API key)
 
 1. Install dependencies:
 
@@ -32,7 +32,8 @@ Microphone → AudioWorklet (16kHz PCM) → Gemini 2.5 Flash Native Audio → Tr
    cp .env.example .env.local
    ```
 
-   Then edit `.env.local` and set your `GEMINI_API_KEY`.
+   Then edit `.env.local` and set your `GEMINI_API_KEY`. If you want to use the OpenAI provider, also set
+   `OPENAI_API_KEY`.
 
 3. Start the dev server:
 
@@ -42,8 +43,8 @@ Microphone → AudioWorklet (16kHz PCM) → Gemini 2.5 Flash Native Audio → Tr
 
 The app runs at `http://localhost:3000`.
 
-> ⚠️ **This app is designed for local use only.** Your Gemini API key is bundled into the client at build time. Do not
-> deploy this to a public server in the current state or your API key will be exposed.
+Use the provider toggle in the header to switch between Gemini and OpenAI.
+
 ## Low Latency Mode
 
 Toggle "Low Latency" in the header to trade transcription for speed. When enabled:
@@ -54,12 +55,17 @@ Toggle "Low Latency" in the header to trade transcription for speed. When enable
 
 Use this when you need the fastest possible turn-around during a live call and don't need a written record of the conversation.
 
+> ⚠️ **This app is designed for local use only.** Your API keys are bundled into the client at build time. Do not deploy
+> this to a public server in the current state or your keys will be exposed.
+
 ## Environment Variables
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `GEMINI_API_KEY` | Yes | — | Your [Gemini API key](https://aistudio.google.com/apikey) |
-| `SILENCE_DURATION_MS` | No | `500` | Milliseconds of silence before Gemini considers speech finished |
+| `OPENAI_API_KEY` | No | — | OpenAI API key for the OpenAI Realtime provider |
+| `OPENAI_REALTIME_MODEL` | No | `gpt-realtime` | OpenAI Realtime model name |
+| `SILENCE_DURATION_MS` | No | `500` | Milliseconds of silence before speech is considered finished |
 
 ## Scripts
 

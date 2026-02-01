@@ -6,8 +6,14 @@ import AudioVisualizer from './components/AudioVisualizer';
 import ChatMessage from './components/ChatMessage';
 import Sidebar from './components/Sidebar';
 
+type Provider = 'gemini' | 'openai';
+
 // --- Constants ---
 const MODEL_NAME = 'gemini-2.5-flash-native-audio-preview-12-2025';
+const OPENAI_MODEL = process.env.OPENAI_REALTIME_MODEL || 'gpt-realtime';
+const OPENAI_VOICE = 'alloy';
+const OPENAI_TRANSCRIBE_MODEL = 'gpt-4o-mini-transcribe';
+const OPENAI_REALTIME_URL = `https://api.openai.com/v1/realtime/calls?model=${encodeURIComponent(OPENAI_MODEL)}`;
 const SYSTEM_INSTRUCTION = `You are a highly skilled bilingual interpreter for English and Portuguese.
 
 Your Goal: Provide accurate, natural, and real-time translation between the two languages.
@@ -66,6 +72,7 @@ export default function App() {
   const [currentSessionId, setCurrentSessionId] = useState<string>(sessions[0].id);
   const [messages, setMessages] = useState<Message[]>([]);
   const [lowLatencyMode, setLowLatencyMode] = useState(false);
+  const [provider, setProvider] = useState<Provider>('gemini');
 
   // Audio pipeline refs (persist across Gemini reconnects)
   const inputContextRef = useRef<AudioContext | null>(null);
@@ -87,7 +94,16 @@ export default function App() {
   const isSessionActiveRef = useRef<boolean>(false);
   const connectRef = useRef<() => Promise<void>>(null);
   const connectGeminiRef = useRef<() => Promise<void>>(null);
+  const connectOpenAiRef = useRef<() => Promise<void>>(null);
   const reconnectTimeoutRef = useRef<number | null>(null);
+  const providerRef = useRef<Provider>(provider);
+
+  // OpenAI realtime refs
+  const openAiPeerRef = useRef<RTCPeerConnection | null>(null);
+  const openAiDataChannelRef = useRef<RTCDataChannel | null>(null);
+  const openAiRemoteSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const openAiAudioElRef = useRef<HTMLAudioElement | null>(null);
+  const openAiHasRemoteTrackRef = useRef<boolean>(false);
 
   // Audio playback refs
   const nextStartTimeRef = useRef<number>(0);
@@ -98,9 +114,10 @@ export default function App() {
   const currentOutputTransRef = useRef<string>('');
   const partialUserElRef = useRef<HTMLDivElement>(null);
   const partialModelElRef = useRef<HTMLDivElement>(null);
+  const lastOpenAiOutputTranscriptRef = useRef<string>('');
 
   // Health monitoring
-  const lastGeminiResponseRef = useRef<number>(0);
+  const lastProviderResponseRef = useRef<number>(0);
   const healthCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -119,6 +136,10 @@ export default function App() {
   useEffect(() => {
     lowLatencyModeRef.current = lowLatencyMode;
   }, [lowLatencyMode]);
+
+  useEffect(() => {
+    providerRef.current = provider;
+  }, [provider]);
 
   // Sync messages to sessions only when messages state changes
   // (partials update DOM directly and don't trigger this)
@@ -177,11 +198,43 @@ export default function App() {
     sessionPromiseRef.current = null;
     resolvedSessionRef.current = null;
     isSessionActiveRef.current = false;
-    lastGeminiResponseRef.current = 0;
+    lastProviderResponseRef.current = 0;
 
     if (healthCheckIntervalRef.current) {
       clearInterval(healthCheckIntervalRef.current);
       healthCheckIntervalRef.current = null;
+    }
+  }, []);
+
+  const cleanupOpenAiSession = useCallback(() => {
+    isSessionActiveRef.current = false;
+    lastProviderResponseRef.current = 0;
+
+    if (healthCheckIntervalRef.current) {
+      clearInterval(healthCheckIntervalRef.current);
+      healthCheckIntervalRef.current = null;
+    }
+
+    if (openAiDataChannelRef.current) {
+      try { openAiDataChannelRef.current.close(); } catch (e) {}
+      openAiDataChannelRef.current = null;
+    }
+    if (openAiPeerRef.current) {
+      try { openAiPeerRef.current.close(); } catch (e) {}
+      openAiPeerRef.current = null;
+    }
+    if (openAiRemoteSourceRef.current) {
+      try { openAiRemoteSourceRef.current.disconnect(); } catch (e) {}
+      openAiRemoteSourceRef.current = null;
+    }
+    openAiHasRemoteTrackRef.current = false;
+    if (openAiAudioElRef.current) {
+      try { openAiAudioElRef.current.pause(); } catch (e) {}
+      openAiAudioElRef.current.srcObject = null;
+      if (openAiAudioElRef.current.parentNode) {
+        openAiAudioElRef.current.parentNode.removeChild(openAiAudioElRef.current);
+      }
+      openAiAudioElRef.current = null;
     }
   }, []);
 
@@ -198,12 +251,13 @@ export default function App() {
       await outputContextRef.current.resume();
     }
 
+    const preferredSampleRate = providerRef.current === 'openai' ? 48000 : 16000;
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: !lowLatencyModeRef.current,
-        sampleRate: { ideal: 16000 },
+        sampleRate: { ideal: preferredSampleRate },
         channelCount: 1,
       }
     });
@@ -246,7 +300,7 @@ export default function App() {
             isSessionActiveRef.current = true;
           },
           onmessage: async (message: LiveServerMessage) => {
-            lastGeminiResponseRef.current = Date.now();
+            lastProviderResponseRef.current = Date.now();
 
             // --- Partial transcriptions (DOM-only, no React re-renders) ---
             if (message.serverContent?.inputTranscription) {
@@ -394,10 +448,10 @@ export default function App() {
       // Start connection health monitoring
       healthCheckIntervalRef.current = setInterval(() => {
         if (!isSessionActiveRef.current || !shouldBeConnectedRef.current) return;
-        const elapsed = Date.now() - lastGeminiResponseRef.current;
-        if (lastGeminiResponseRef.current > 0 && elapsed > HEALTH_TIMEOUT_MS) {
+        const elapsed = Date.now() - lastProviderResponseRef.current;
+        if (lastProviderResponseRef.current > 0 && elapsed > HEALTH_TIMEOUT_MS) {
           console.warn(`No Gemini response for ${HEALTH_TIMEOUT_MS / 1000}s, reconnecting...`);
-          lastGeminiResponseRef.current = 0;
+          lastProviderResponseRef.current = 0;
           // Trigger reconnect via the Gemini-only path
           isSessionActiveRef.current = false;
           if (inputContextRef.current && inputContextRef.current.state !== 'closed') {
@@ -416,7 +470,348 @@ export default function App() {
     }
   }, [cleanupGeminiSession, scrollToBottom]);
 
-  /** Full connect: set up audio pipeline then connect Gemini. */
+  const buildOpenAiSessionUpdate = useCallback((isLowLatency: boolean) => ({
+    type: 'realtime',
+    output_modalities: ['audio'],
+    instructions: SYSTEM_INSTRUCTION,
+    audio: {
+      input: {
+        format: { type: 'audio/pcm', rate: 24000 },
+        turn_detection: {
+          type: 'server_vad',
+          silence_duration_ms: isLowLatency ? LOW_LATENCY_SILENCE_MS : SILENCE_DURATION_MS,
+          prefix_padding_ms: 300,
+          threshold: 0.5,
+          create_response: true,
+          interrupt_response: true,
+        },
+        ...(isLowLatency ? {} : { transcription: { model: OPENAI_TRANSCRIBE_MODEL } }),
+      },
+      output: {
+        format: { type: 'audio/pcm', rate: 24000 },
+        voice: OPENAI_VOICE,
+      },
+    },
+  }), []);
+
+  const sendOpenAiEvent = useCallback((payload: any) => {
+    const channel = openAiDataChannelRef.current;
+    if (!channel || channel.readyState !== 'open') return;
+    channel.send(JSON.stringify(payload));
+  }, []);
+
+  const applyOpenAiSessionUpdate = useCallback((isLowLatency: boolean) => {
+    sendOpenAiEvent({ type: 'session.update', session: buildOpenAiSessionUpdate(isLowLatency) });
+  }, [buildOpenAiSessionUpdate, sendOpenAiEvent]);
+
+  const handleOpenAiEvent = useCallback(async (event: any) => {
+    if (!event || typeof event.type !== 'string') return;
+    lastProviderResponseRef.current = Date.now();
+
+    switch (event.type) {
+      case 'session.created': {
+        applyOpenAiSessionUpdate(lowLatencyModeRef.current);
+        break;
+      }
+      case 'response.output_audio.delta':
+      case 'response.audio.delta': {
+        if (openAiHasRemoteTrackRef.current) break;
+        const audioBase64 = event.delta || event.audio || event.data;
+        if (!audioBase64 || !outputContextRef.current || !outputAnalyserRef.current) break;
+        const ctx = outputContextRef.current;
+        const bytes = decodeBase64(audioBase64);
+        const buffer = await decodeAudioData(bytes, ctx, 24000, 1);
+        nextStartTimeRef.current = Math.max(nextStartTimeRef.current, ctx.currentTime);
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(outputAnalyserRef.current);
+        source.addEventListener('ended', () => { audioSourcesRef.current.delete(source); });
+        source.start(nextStartTimeRef.current);
+        nextStartTimeRef.current += buffer.duration;
+        audioSourcesRef.current.add(source);
+        break;
+      }
+      case 'conversation.item.input_audio_transcription.delta': {
+        const delta = event.delta || '';
+        if (delta) {
+          currentInputTransRef.current += delta;
+          updatePartialEl(partialUserElRef.current, currentInputTransRef.current);
+          scrollToBottom();
+        }
+        break;
+      }
+      case 'conversation.item.input_audio_transcription.completed': {
+        const finalText = event.transcript || event.text || '';
+        if (finalText) {
+          setMessages(prev => [...prev, {
+            id: nextMessageId('user'),
+            role: 'user',
+            text: finalText,
+            timestamp: new Date(),
+            isFinal: true
+          }]);
+        }
+        currentInputTransRef.current = '';
+        updatePartialEl(partialUserElRef.current, '');
+        break;
+      }
+      case 'response.output_audio_transcript.delta': {
+        const delta = event.delta || '';
+        if (delta) {
+          currentOutputTransRef.current += delta;
+          updatePartialEl(partialModelElRef.current, currentOutputTransRef.current);
+          scrollToBottom();
+        }
+        break;
+      }
+      case 'response.output_audio_transcript.done': {
+        const finalText = event.transcript || event.text || currentOutputTransRef.current;
+        if (finalText && finalText !== lastOpenAiOutputTranscriptRef.current) {
+          setMessages(prev => [...prev, {
+            id: nextMessageId('model'),
+            role: 'model',
+            text: finalText,
+            timestamp: new Date(),
+            isFinal: true
+          }]);
+          lastOpenAiOutputTranscriptRef.current = finalText;
+        }
+        currentOutputTransRef.current = '';
+        updatePartialEl(partialModelElRef.current, '');
+        break;
+      }
+      case 'response.content_part.added': {
+        if (event.part?.transcript && !currentOutputTransRef.current) {
+          currentOutputTransRef.current = event.part.transcript;
+          updatePartialEl(partialModelElRef.current, currentOutputTransRef.current);
+          scrollToBottom();
+        }
+        break;
+      }
+      case 'conversation.item.created': {
+        const role = event.item?.role;
+        const content = event.item?.content;
+        if (role === 'assistant' && Array.isArray(content)) {
+          const partWithTranscript = content.find((part: any) => part?.transcript);
+          if (partWithTranscript?.transcript && partWithTranscript.transcript !== lastOpenAiOutputTranscriptRef.current) {
+            const finalText = partWithTranscript.transcript;
+            setMessages(prev => [...prev, {
+              id: nextMessageId('model'),
+              role: 'model',
+              text: finalText,
+              timestamp: new Date(),
+              isFinal: true
+            }]);
+            lastOpenAiOutputTranscriptRef.current = finalText;
+            currentOutputTransRef.current = '';
+            updatePartialEl(partialModelElRef.current, '');
+          }
+        }
+        break;
+      }
+      case 'response.done': {
+        if (currentOutputTransRef.current) {
+          const finalText = currentOutputTransRef.current;
+          if (finalText !== lastOpenAiOutputTranscriptRef.current) {
+            setMessages(prev => [...prev, {
+              id: nextMessageId('model'),
+              role: 'model',
+              text: finalText,
+              timestamp: new Date(),
+              isFinal: true
+            }]);
+            lastOpenAiOutputTranscriptRef.current = finalText;
+          }
+          currentOutputTransRef.current = '';
+          updatePartialEl(partialModelElRef.current, '');
+        }
+        break;
+      }
+      case 'input_audio_buffer.speech_started': {
+        if (currentOutputTransRef.current) {
+          currentOutputTransRef.current = '';
+          updatePartialEl(partialModelElRef.current, '');
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }, [applyOpenAiSessionUpdate, scrollToBottom]);
+
+  /** Connect (or reconnect) to OpenAI Realtime via WebRTC. */
+  const connectOpenAi = useCallback(async () => {
+    cleanupOpenAiSession();
+    setError(null);
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      setError('OPENAI_API_KEY is not set.');
+      setConnectionState(ConnectionState.ERROR);
+      return;
+    }
+
+    if (!mediaStreamRef.current) {
+      setError('Microphone is not initialized.');
+      setConnectionState(ConnectionState.ERROR);
+      return;
+    }
+
+    try {
+      const isLowLatency = lowLatencyModeRef.current;
+      const pc = new RTCPeerConnection();
+      openAiPeerRef.current = pc;
+
+      const dataChannel = pc.createDataChannel('oai-events');
+      openAiDataChannelRef.current = dataChannel;
+
+      pc.ontrack = (event) => {
+        if (!outputContextRef.current || !outputAnalyserRef.current) return;
+        const [stream] = event.streams;
+        if (!stream) return;
+        openAiHasRemoteTrackRef.current = true;
+        if (!openAiAudioElRef.current) {
+          const el = document.createElement('audio');
+          el.autoplay = true;
+          el.playsInline = true;
+          el.style.display = 'none';
+          document.body.appendChild(el);
+          openAiAudioElRef.current = el;
+        }
+        openAiAudioElRef.current.srcObject = stream;
+        openAiAudioElRef.current.play().catch(() => {});
+        if (openAiRemoteSourceRef.current) {
+          try { openAiRemoteSourceRef.current.disconnect(); } catch (e) {}
+          openAiRemoteSourceRef.current = null;
+        }
+        const source = outputContextRef.current.createMediaStreamSource(stream);
+        source.connect(outputAnalyserRef.current);
+        openAiRemoteSourceRef.current = source;
+      };
+
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'connected') {
+          setConnectionState(ConnectionState.CONNECTED);
+        }
+        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected' || pc.connectionState === 'closed') {
+          isSessionActiveRef.current = false;
+          if (shouldBeConnectedRef.current) {
+            setConnectionState(ConnectionState.CONNECTING);
+            reconnectTimeoutRef.current = window.setTimeout(() => {
+              if (!shouldBeConnectedRef.current) return;
+              if (inputContextRef.current && inputContextRef.current.state !== 'closed') {
+                connectOpenAiRef.current?.();
+              } else {
+                connectRef.current?.();
+              }
+            }, 2000);
+          } else {
+            setConnectionState(ConnectionState.DISCONNECTED);
+          }
+        }
+      };
+
+      pc.addTransceiver('audio', { direction: 'sendrecv' });
+      const audioTrack = mediaStreamRef.current.getAudioTracks()[0];
+      if (audioTrack) {
+        pc.addTrack(audioTrack, mediaStreamRef.current);
+      }
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      if (pc.iceGatheringState !== 'complete') {
+        await new Promise<void>((resolve) => {
+          const timeout = window.setTimeout(resolve, 2000);
+          const handleChange = () => {
+            if (pc.iceGatheringState === 'complete') {
+              window.clearTimeout(timeout);
+              pc.removeEventListener('icegatheringstatechange', handleChange);
+              resolve();
+            }
+          };
+          pc.addEventListener('icegatheringstatechange', handleChange);
+        });
+      }
+
+      const localSdp = pc.localDescription?.sdp;
+      if (!localSdp) {
+        throw new Error('WebRTC offer SDP is empty. Check browser WebRTC support and mic permissions.');
+      }
+
+      const response = await fetch(OPENAI_REALTIME_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/sdp',
+        },
+        body: localSdp,
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`OpenAI Realtime connection failed: ${text}`);
+      }
+
+      const answerSdp = await response.text();
+
+      if (!answerSdp) {
+        throw new Error('OpenAI Realtime returned an empty SDP answer.');
+      }
+
+      await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp });
+
+      dataChannel.onopen = () => {
+        isSessionActiveRef.current = true;
+        setConnectionState(ConnectionState.CONNECTED);
+        lastProviderResponseRef.current = Date.now();
+        applyOpenAiSessionUpdate(isLowLatency);
+      };
+
+      dataChannel.onmessage = (event) => {
+        try {
+          const parsed = JSON.parse(event.data);
+          void handleOpenAiEvent(parsed);
+        } catch (e) {
+          console.warn('OpenAI event parse failed:', e);
+        }
+      };
+
+      dataChannel.onclose = () => {
+        isSessionActiveRef.current = false;
+      };
+
+      // Start connection health monitoring
+      healthCheckIntervalRef.current = setInterval(() => {
+        if (!isSessionActiveRef.current || !shouldBeConnectedRef.current) return;
+        const elapsed = Date.now() - lastProviderResponseRef.current;
+        if (lastProviderResponseRef.current > 0 && elapsed > HEALTH_TIMEOUT_MS) {
+          console.warn(`No OpenAI response for ${HEALTH_TIMEOUT_MS / 1000}s, reconnecting...`);
+          lastProviderResponseRef.current = 0;
+          isSessionActiveRef.current = false;
+          if (inputContextRef.current && inputContextRef.current.state !== 'closed') {
+            connectOpenAiRef.current?.();
+          } else {
+            connectRef.current?.();
+          }
+        }
+      }, HEALTH_CHECK_INTERVAL_MS);
+    } catch (err: any) {
+      console.error('OpenAI connection error:', err);
+      setError(err.message || 'Failed to connect to OpenAI Realtime.');
+      setConnectionState(ConnectionState.ERROR);
+      isSessionActiveRef.current = false;
+    }
+  }, [applyOpenAiSessionUpdate, cleanupOpenAiSession, handleOpenAiEvent]);
+
+  const connectProvider = useCallback(async () => {
+    if (providerRef.current === 'openai') {
+      await connectOpenAi();
+    } else {
+      await connectGemini();
+    }
+  }, [connectGemini, connectOpenAi]);
+
+  /** Full connect: set up audio pipeline then connect provider. */
   const connect = useCallback(async () => {
     if (reconnectTimeoutRef.current) {
       window.clearTimeout(reconnectTimeoutRef.current);
@@ -429,17 +824,21 @@ export default function App() {
 
     try {
       await setupAudioPipeline();
-      await connectGemini();
+      await connectProvider();
     } catch (err: any) {
       console.error("Connection flow error:", err);
       setError(err.message || "Failed to connect. Check permissions and network.");
       setConnectionState(ConnectionState.ERROR);
-      cleanupGeminiSession();
+      if (providerRef.current === 'openai') {
+        cleanupOpenAiSession();
+      } else {
+        cleanupGeminiSession();
+      }
       await cleanupAudioPipeline();
       shouldBeConnectedRef.current = false;
       isSessionActiveRef.current = false;
     }
-  }, [setupAudioPipeline, connectGemini, cleanupGeminiSession, cleanupAudioPipeline]);
+  }, [setupAudioPipeline, connectProvider, cleanupOpenAiSession, cleanupGeminiSession, cleanupAudioPipeline]);
 
   const disconnect = useCallback(async () => {
     shouldBeConnectedRef.current = false;
@@ -450,15 +849,20 @@ export default function App() {
       reconnectTimeoutRef.current = null;
     }
 
-    cleanupGeminiSession();
+    if (providerRef.current === 'openai') {
+      cleanupOpenAiSession();
+    } else {
+      cleanupGeminiSession();
+    }
     await cleanupAudioPipeline();
 
     // Clear any partial transcription DOM state
     currentInputTransRef.current = '';
     currentOutputTransRef.current = '';
+    lastOpenAiOutputTranscriptRef.current = '';
     updatePartialEl(partialUserElRef.current, '');
     updatePartialEl(partialModelElRef.current, '');
-  }, [cleanupGeminiSession, cleanupAudioPipeline]);
+  }, [cleanupOpenAiSession, cleanupGeminiSession, cleanupAudioPipeline]);
 
   // Keep stable refs for the onclose handler
   useEffect(() => {
@@ -468,6 +872,10 @@ export default function App() {
   useEffect(() => {
     connectGeminiRef.current = connectGemini;
   }, [connectGemini]);
+
+  useEffect(() => {
+    connectOpenAiRef.current = connectOpenAi;
+  }, [connectOpenAi]);
 
   const handleToggleConnection = () => {
     if (connectionState === ConnectionState.CONNECTED || connectionState === ConnectionState.CONNECTING) {
@@ -483,8 +891,28 @@ export default function App() {
     setLowLatencyMode(next);
 
     if (connectionState === ConnectionState.CONNECTED || connectionState === ConnectionState.CONNECTING) {
-      cleanupGeminiSession();
-      await connectGemini();
+      if (providerRef.current === 'openai') {
+        applyOpenAiSessionUpdate(next);
+      } else {
+        cleanupGeminiSession();
+        await connectGemini();
+      }
+    }
+  };
+
+  const handleProviderChange = async (nextProvider: Provider) => {
+    if (providerRef.current === nextProvider) return;
+    const wasConnected = connectionState === ConnectionState.CONNECTED || connectionState === ConnectionState.CONNECTING;
+
+    if (wasConnected) {
+      await disconnect();
+    }
+
+    providerRef.current = nextProvider;
+    setProvider(nextProvider);
+
+    if (wasConnected) {
+      await connect();
     }
   };
 
@@ -527,6 +955,24 @@ export default function App() {
             <h1 className="text-lg md:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-300 to-teal-200">DuoVoice Live</h1>
           </div>
           <div className="flex items-center gap-3">
+            <div className="flex items-center rounded-full border border-slate-700 bg-slate-800/70 p-0.5 text-xs font-semibold">
+              <button
+                onClick={() => handleProviderChange('gemini')}
+                aria-pressed={provider === 'gemini'}
+                className={`px-3 py-1 rounded-full transition-colors
+                  ${provider === 'gemini' ? 'bg-indigo-500/30 text-indigo-100' : 'text-slate-300 hover:text-white'}`}
+              >
+                Gemini
+              </button>
+              <button
+                onClick={() => handleProviderChange('openai')}
+                aria-pressed={provider === 'openai'}
+                className={`px-3 py-1 rounded-full transition-colors
+                  ${provider === 'openai' ? 'bg-teal-500/30 text-teal-100' : 'text-slate-300 hover:text-white'}`}
+              >
+                OpenAI
+              </button>
+            </div>
             <button
               onClick={handleToggleLowLatency}
               aria-pressed={lowLatencyMode}
