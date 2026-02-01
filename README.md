@@ -65,7 +65,7 @@ Use this when you need the fastest possible turn-around during a live call and d
 | `GEMINI_API_KEY` | Yes | — | Your [Gemini API key](https://aistudio.google.com/apikey) |
 | `OPENAI_API_KEY` | No | — | OpenAI API key for the OpenAI Realtime provider |
 | `OPENAI_REALTIME_MODEL` | No | `gpt-realtime` | OpenAI Realtime model name |
-| `SILENCE_DURATION_MS` | No | `500` | Milliseconds of silence before speech is considered finished |
+| `SILENCE_DURATION_MS` | No | `600` | Milliseconds of silence before speech is considered finished |
 
 ## Scripts
 

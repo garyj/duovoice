@@ -35,7 +35,7 @@ Input: "Estou bem, obrigado." -> Output: "I am fine, thanks."
 
 const HEALTH_CHECK_INTERVAL_MS = 5000;
 const HEALTH_TIMEOUT_MS = 15000;
-const SILENCE_DURATION_MS = Number(process.env.SILENCE_DURATION_MS) || 500;
+const SILENCE_DURATION_MS = Number(process.env.SILENCE_DURATION_MS) || 600;
 const LOW_LATENCY_SILENCE_MS = 250;
 
 // Simple counter to guarantee unique message IDs even within the same millisecond
