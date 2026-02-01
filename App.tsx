@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 import { ConnectionState, Message, ChatSession } from './types';
 import { encodeBase64, decodeAudioData, decodeBase64 } from './utils/audioUtils';
+import { getGeminiKey, getOpenAiKey } from './utils/keyStore';
 import AudioVisualizer from './components/AudioVisualizer';
 import ChatMessage from './components/ChatMessage';
 import Sidebar from './components/Sidebar';
+import SettingsPanel from './components/SettingsPanel';
 
 type Provider = 'gemini' | 'openai';
 
@@ -73,6 +75,12 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [lowLatencyMode, setLowLatencyMode] = useState(false);
   const [provider, setProvider] = useState<Provider>('gemini');
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  const resolveGeminiKey = () =>
+    getGeminiKey() || process.env.GEMINI_API_KEY || process.env.API_KEY;
+  const resolveOpenAiKey = () => getOpenAiKey() || process.env.OPENAI_API_KEY;
+  const hasAnyKey = Boolean(resolveGeminiKey() || resolveOpenAiKey());
 
   // Audio pipeline refs (persist across Gemini reconnects)
   const inputContextRef = useRef<AudioContext | null>(null);
@@ -290,7 +298,14 @@ export default function App() {
 
     try {
       const isLowLatency = lowLatencyModeRef.current;
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const apiKey = resolveGeminiKey();
+      if (!apiKey) {
+        setError('Gemini API key not set. Open Settings to add it.');
+        setConnectionState(ConnectionState.ERROR);
+        isSessionActiveRef.current = false;
+        return;
+      }
+      const ai = new GoogleGenAI({ apiKey });
       const config = {
         model: MODEL_NAME,
         callbacks: {
@@ -644,9 +659,9 @@ export default function App() {
     cleanupOpenAiSession();
     setError(null);
 
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = resolveOpenAiKey();
     if (!apiKey) {
-      setError('OPENAI_API_KEY is not set.');
+      setError('OpenAI API key not set. Open Settings to add it.');
       setConnectionState(ConnectionState.ERROR);
       return;
     }
@@ -822,6 +837,19 @@ export default function App() {
     setConnectionState(ConnectionState.CONNECTING);
     shouldBeConnectedRef.current = true;
 
+    const hasKey = providerRef.current === 'openai'
+      ? Boolean(resolveOpenAiKey())
+      : Boolean(resolveGeminiKey());
+    if (!hasKey) {
+      const message = providerRef.current === 'openai'
+        ? 'OpenAI API key not set. Open Settings to add it.'
+        : 'Gemini API key not set. Open Settings to add it.';
+      setError(message);
+      setConnectionState(ConnectionState.ERROR);
+      shouldBeConnectedRef.current = false;
+      return;
+    }
+
     try {
       await setupAudioPipeline();
       await connectProvider();
@@ -954,7 +982,7 @@ export default function App() {
             </div>
             <h1 className="text-lg md:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-300 to-teal-200">DuoVoice Live</h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="relative flex items-center gap-3">
             <div className="flex items-center rounded-full border border-slate-700 bg-slate-800/70 p-0.5 text-xs font-semibold">
               <button
                 onClick={() => handleProviderChange('gemini')}
@@ -982,6 +1010,28 @@ export default function App() {
             >
               Low Latency {lowLatencyMode ? 'ON' : 'OFF'}
             </button>
+            <button
+              onClick={() => setIsSettingsOpen((v) => !v)}
+              aria-pressed={isSettingsOpen}
+              aria-label="Open settings"
+              className={`relative inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold transition-all shadow-sm
+                ${isSettingsOpen ? 'bg-rose-500/35 border-rose-300/70 text-rose-50 shadow-rose-500/40' : 'bg-rose-500/25 border-rose-300/60 text-rose-50 hover:bg-rose-500/35 hover:border-rose-200/80'}`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h3m-6.75 6h9m-10.5 6h12M4.5 6h.75m-.75 6h.75m-.75 6h.75" />
+              </svg>
+              <span>Settings/Keys</span>
+              {!hasAnyKey && (
+                <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-300 opacity-75"></span>
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-rose-300"></span>
+                </span>
+              )}
+            </button>
+            <SettingsPanel
+              isOpen={isSettingsOpen}
+              onClose={() => setIsSettingsOpen(false)}
+            />
             <div className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-2
               ${connectionState === ConnectionState.CONNECTED ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30' :
                 connectionState === ConnectionState.CONNECTING ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' :

@@ -26,16 +26,7 @@ Microphone → AudioWorklet (16kHz PCM) → Gemini 2.5 Flash Native Audio → Tr
    npm install
    ```
 
-2. Copy the example env file and add your API key:
-
-   ```
-   cp .env.example .env.local
-   ```
-
-   Then edit `.env.local` and set your `GEMINI_API_KEY`. If you want to use the OpenAI provider, also set
-   `OPENAI_API_KEY`.
-
-3. Start the dev server:
+2. Start the dev server:
 
    ```
    npm run dev
@@ -43,7 +34,19 @@ Microphone → AudioWorklet (16kHz PCM) → Gemini 2.5 Flash Native Audio → Tr
 
 The app runs at `http://localhost:3000`.
 
-Use the provider toggle in the header to switch between Gemini and OpenAI.
+Use the Settings button in the header to enter your Gemini/OpenAI API keys. Keys are stored in your browser
+localStorage and are never sent to our servers.
+
+### Optional: local dev env fallback
+
+If you prefer, you can still use `.env.local` for **localhost development only**:
+
+```
+cp .env.example .env.local
+```
+
+Then edit `.env.local` and set `GEMINI_API_KEY` and/or `OPENAI_API_KEY`. These are only used by the dev server,
+and are intentionally ignored in production builds.
 
 ## Low Latency Mode
 
@@ -55,15 +58,24 @@ Toggle "Low Latency" in the header to trade transcription for speed. When enable
 
 Use this when you need the fastest possible turn-around during a live call and don't need a written record of the conversation.
 
-> ⚠️ **This app is designed for local use only.** Your API keys are bundled into the client at build time. Do not deploy
-> this to a public server in the current state or your keys will be exposed.
+> ✅ **Public deployment is supported.** Keys are stored locally in the user's browser and are never sent to our servers.
+> Requests go directly from the user's device to the provider APIs.
+
+## Public Deployment (Cloudflare Pages)
+
+This app is static and can be deployed to Cloudflare Pages.
+
+- Build command: `npm run build`
+- Output directory: `dist`
+
+Users enter their own API keys in the Settings panel after loading the site.
 
 ## Environment Variables
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `GEMINI_API_KEY` | Yes | — | Your [Gemini API key](https://aistudio.google.com/apikey) |
-| `OPENAI_API_KEY` | No | — | OpenAI API key for the OpenAI Realtime provider |
+| `GEMINI_API_KEY` | No (dev only) | — | Local dev fallback for Gemini key |
+| `OPENAI_API_KEY` | No (dev only) | — | Local dev fallback for OpenAI Realtime |
 | `OPENAI_REALTIME_MODEL` | No | `gpt-realtime` | OpenAI Realtime model name |
 | `SILENCE_DURATION_MS` | No | `600` | Milliseconds of silence before speech is considered finished |
 
