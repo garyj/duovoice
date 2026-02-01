@@ -44,6 +44,15 @@ The app runs at `http://localhost:3000`.
 
 > ⚠️ **This app is designed for local use only.** Your Gemini API key is bundled into the client at build time. Do not
 > deploy this to a public server in the current state or your API key will be exposed.
+## Low Latency Mode
+
+Toggle "Low Latency" in the header to trade transcription for speed. When enabled:
+
+- **Silence detection drops from 500ms to 250ms** — the model begins translating sooner after you stop speaking.
+- **Transcription is disabled** — no text appears in the chat log, but translated audio still plays back normally.
+- **Gemini reconnects automatically** when toggled mid-session; for OpenAI, a lightweight session update is sent without reconnecting.
+
+Use this when you need the fastest possible turn-around during a live call and don't need a written record of the conversation.
 
 ## Environment Variables
 
