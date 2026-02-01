@@ -532,6 +532,20 @@ export default function App() {
     if (!event || typeof event.type !== 'string') return;
     lastProviderResponseRef.current = Date.now();
 
+    if (lowLatencyModeRef.current) {
+      const suppressedEvents = new Set([
+        'conversation.item.input_audio_transcription.delta',
+        'conversation.item.input_audio_transcription.completed',
+        'response.output_audio_transcript.delta',
+        'response.output_audio_transcript.done',
+        'response.content_part.added',
+        'conversation.item.created',
+        'response.done',
+        'input_audio_buffer.speech_started',
+      ]);
+      if (suppressedEvents.has(event.type)) return;
+    }
+
     switch (event.type) {
       case 'session.created': {
         applyOpenAiSessionUpdate(lowLatencyModeRef.current);
@@ -1068,7 +1082,12 @@ export default function App() {
             </div>
           </div>
           <div className="flex-1 bg-slate-900 relative overflow-hidden flex flex-col">
-            <div className="flex-1 overflow-y-auto p-4 pb-32 scroll-smooth" ref={scrollRef}>
+          <div className="flex-1 overflow-y-auto p-4 pb-32 scroll-smooth" ref={scrollRef}>
+            {lowLatencyMode && (
+              <div className="mb-4 rounded-lg border border-teal-500/30 bg-teal-500/10 px-4 py-2 text-center text-xs text-teal-200">
+                Low Latency is ON — transcriptions are disabled for faster response.
+              </div>
+            )}
               {messages.length === 0 && !currentInputTransRef.current && !currentOutputTransRef.current ? (
                 <div className="h-full flex flex-col items-center justify-center text-slate-500 opacity-60">
                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-16 h-16 mb-4"><path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" /></svg>
