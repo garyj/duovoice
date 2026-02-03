@@ -1006,6 +1006,17 @@ export default function App() {
             <h1 className="text-lg md:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-300 to-teal-200">DuoVoice Live</h1>
           </div>
           <div className="relative flex items-center gap-3">
+            <a
+              href="https://github.com/garyj/duovoice/"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Open DuoVoice Live on GitHub"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-700 bg-slate-800/70 text-slate-300 transition-colors hover:text-white hover:border-slate-500"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 fill-current">
+                <path d="M12 .5c-6.6 0-12 5.4-12 12 0 5.3 3.4 9.8 8.2 11.4.6.1.8-.3.8-.6v-2.2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1.1-.8.1-.8.1-.8 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.6-.3-5.4-1.3-5.4-5.9 0-1.3.5-2.4 1.2-3.3-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2 1-.3 2.1-.4 3.1-.4s2.1.1 3.1.4c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.8.1 3.1.8.9 1.2 2 1.2 3.3 0 4.6-2.8 5.6-5.4 5.9.4.4.8 1.1.8 2.2v3.2c0 .3.2.7.8.6C20.6 22.3 24 17.8 24 12.5 24 5.9 18.6.5 12 .5z" />
+              </svg>
+            </a>
             <div className="flex items-center rounded-full border border-slate-700 bg-slate-800/70 p-0.5 text-xs font-semibold">
               <button
                 onClick={() => handleProviderChange('gemini')}
