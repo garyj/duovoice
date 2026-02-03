@@ -43,13 +43,13 @@ const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
-        <div className="p-4">
+        <div className="px-2 py-4">
           <button
             onClick={() => {
               onNewChat();
               if (window.innerWidth < 768) onClose();
             }}
-            className="w-full flex items-center gap-3 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all shadow-lg shadow-indigo-900/20 group hover:scale-[1.02] active:scale-[0.98]"
+            className="w-full flex items-center gap-3 px-3 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-all shadow-lg shadow-indigo-900/20 group hover:scale-[1.02] active:scale-[0.98]"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
