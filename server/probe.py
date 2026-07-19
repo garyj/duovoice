@@ -45,7 +45,8 @@ from pathlib import Path
 import websockets
 from dotenv import load_dotenv
 
-WS_URL = "wss://api.openai.com/v1/realtime/translations?model=gpt-realtime-translate"
+from server.translator import open_upstream, session_update
+
 SAMPLE_RATE = 24_000
 BYTES_PER_SAMPLE = 2
 INPUT_FRAME_MS = 40  # how much audio each append carries; a live mic sends ~this
@@ -103,21 +104,6 @@ def write_wav(path: Path, pcm: bytes) -> None:
         w.setsampwidth(2)
         w.setframerate(SAMPLE_RATE)
         w.writeframes(pcm)
-
-
-def session_update(target: str, noise: str) -> dict[str, object]:
-    return {
-        "type": "session.update",
-        "session": {
-            "audio": {
-                "input": {
-                    "transcription": {"model": "gpt-realtime-whisper"},
-                    "noise_reduction": {"type": noise},
-                },
-                "output": {"language": target},
-            }
-        },
-    }
 
 
 # ── run state + result ────────────────────────────────────────────────────────
@@ -327,28 +313,27 @@ async def run_once(
     caps: tuple[float, float, float],
     echo: bool,
 ) -> RunResult:
-    async with websockets.connect(
-        WS_URL, additional_headers={"Authorization": f"Bearer {key}"}, max_size=None
-    ) as ws:
-        st = _State(t0=time.perf_counter())
-        receiver = asyncio.create_task(_receive(ws, st, echo))
-        try:
-            await _await(st.created, st, 15, "session.created")
-            await ws.send(json.dumps(session_update(target, noise)))
-            await _await(st.ready, st, 15, "session.updated")
-            if echo:
-                print(f"  streaming {fixture_seconds:.1f}s of audio...", flush=True)
-            utterance_start, utterance_end = await _stream(
-                ws, st, pcm, frame_bytes(INPUT_FRAME_MS), realtime, caps
-            )
-            with contextlib.suppress(websockets.ConnectionClosed):
-                await ws.send(json.dumps({"type": "session.close"}))
-            with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(st.closed.wait(), timeout=5)
-        finally:
-            receiver.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await receiver
+    ws = await open_upstream(key)
+    st = _State(t0=time.perf_counter())
+    receiver = asyncio.create_task(_receive(ws, st, echo))
+    try:
+        await _await(st.created, st, 15, "session.created")
+        await ws.send(json.dumps(session_update(target, noise)))
+        await _await(st.ready, st, 15, "session.updated")
+        if echo:
+            print(f"  streaming {fixture_seconds:.1f}s of audio...", flush=True)
+        utterance_start, utterance_end = await _stream(
+            ws, st, pcm, frame_bytes(INPUT_FRAME_MS), realtime, caps
+        )
+        with contextlib.suppress(websockets.ConnectionClosed):
+            await ws.send(json.dumps({"type": "session.close"}))
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(st.closed.wait(), timeout=5)
+    finally:
+        receiver.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await receiver
+        await ws.close()
 
     if st.error is not None:
         raise ProbeError(st.error)
