@@ -80,8 +80,8 @@ const AudioVisualizer: React.FC<AudioVisualizerProps> = ({ analyser, isActive, c
   }, [analyser, isActive, color]);
 
   return (
-    <canvas 
-      ref={canvasRef} 
+    <canvas
+      ref={canvasRef}
       className="w-full h-full"
     />
   );

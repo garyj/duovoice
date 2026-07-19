@@ -10,19 +10,19 @@ interface SidebarProps {
   onNewChat: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ 
-  isOpen, 
-  onClose, 
-  sessions, 
-  currentSessionId, 
-  onSelectSession, 
-  onNewChat 
+const Sidebar: React.FC<SidebarProps> = ({
+  isOpen,
+  onClose,
+  sessions,
+  currentSessionId,
+  onSelectSession,
+  onNewChat
 }) => {
   return (
     <>
       {/* Mobile Overlay */}
       {isOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm"
           onClick={onClose}
         />
@@ -72,8 +72,8 @@ const Sidebar: React.FC<SidebarProps> = ({
                 if (window.innerWidth < 768) onClose();
               }}
               className={`w-full text-left px-3 py-3 rounded-lg text-sm transition-all flex items-center gap-3 group
-                ${currentSessionId === session.id 
-                  ? 'bg-slate-800 text-white border border-slate-700 shadow-sm' 
+                ${currentSessionId === session.id
+                  ? 'bg-slate-800 text-white border border-slate-700 shadow-sm'
                   : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-200 border border-transparent'
                 }
               `}
