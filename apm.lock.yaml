@@ -1,5 +1,5 @@
 lockfile_version: '1'
-generated_at: '2026-07-19T04:51:22.462274+00:00'
+generated_at: '2026-07-19T05:14:54.364747+00:00'
 apm_version: 0.25.0
 dependencies:
 - repo_url: sveltejs/ai-tools
@@ -331,8 +331,26 @@ deployments:
   content_hash: sha256:25140077052ea25ab518e7143be355cfcf1f9f25ca24dcac74676ec242951d4e
 - kind: uri
   target: mcp
+  value: daisyui-blueprint
+  runtime: claude
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: null
+- kind: uri
+  target: mcp
   value: svelte
   runtime: claude
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: null
+- kind: uri
+  target: mcp
+  value: daisyui-blueprint
+  runtime: codex
   scope: project
   owners:
   - .
@@ -349,8 +367,26 @@ deployments:
   content_hash: null
 - kind: uri
   target: mcp
+  value: daisyui-blueprint
+  runtime: copilot
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: null
+- kind: uri
+  target: mcp
   value: svelte
   runtime: copilot
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: null
+- kind: uri
+  target: mcp
+  value: daisyui-blueprint
+  runtime: vscode
   scope: project
   owners:
   - .
@@ -366,8 +402,21 @@ deployments:
   active_owner: .
   content_hash: null
 mcp_servers:
+- daisyui-blueprint
 - svelte
 mcp_configs:
+  daisyui-blueprint:
+    name: daisyui-blueprint
+    transport: stdio
+    env:
+      LICENSE: ${DAISYUI_BLUEPRINT_LICENSE}
+      EMAIL: ${DAISYUI_BLUEPRINT_EMAIL:-gary@jarrel.com.au}
+      FIGMA: ${FIGMA_TOKEN}
+    args:
+    - -y
+    - daisyui-blueprint@latest
+    registry: false
+    command: npx
   svelte:
     name: svelte
     transport: http
@@ -375,12 +424,16 @@ mcp_configs:
     url: https://mcp.svelte.dev/mcp
 mcp_target_servers:
   claude:
+  - daisyui-blueprint
   - svelte
   codex:
+  - daisyui-blueprint
   - svelte
   copilot:
+  - daisyui-blueprint
   - svelte
   vscode:
+  - daisyui-blueprint
   - svelte
 mcp_config_provenance:
   svelte: svelte
