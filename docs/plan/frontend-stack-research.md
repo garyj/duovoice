@@ -21,20 +21,20 @@ and the upcoming real estate project.
   week). The huntabyte stack (shadcn-svelte → Bits UI) is the consensus
   "serious app" tier in 2026 roundups.
 - **Copy-in model**: the CLI writes component source into your repo; you own and
-  edit it. Best match for the stated goal of learning transferable patterns —
+  edit it. Best match for the stated goal of learning transferable patterns -
   "you edit the button by editing the button." Skills compound across projects.
 - **Best premium-dark aesthetic out of the box** (Linear/Vercel register), which is
   the DuoVoice brief. No runtime style engine, no app shell: a custom waveform
   canvas and Svelte transitions sit alongside it untouched.
 - DuoVoice only carries the components it uses (Button, Badge, Scroll Area, maybe
-  Dialog) — minimal surface area for a critical live tool.
+  Dialog) - minimal surface area for a critical live tool.
 - Real estate needs are all present: Data Table (TanStack), Pagination, Select,
   Combobox, Slider, Calendar/Date Picker, Card, Carousel, Dialog, forms via
   Formsnap. Charts via LayerChart.
 - Theming = CSS-variable token sets; two brands (dark audio / light real estate)
   are two token files. Generator: https://tweakcn.com/
 - Official plain-Vite install path (no SvelteKit needed):
-  https://www.shadcn-svelte.com/docs/installation/vite — requires wiring the
+  https://www.shadcn-svelte.com/docs/installation/vite - requires wiring the
   `$lib` alias in tsconfig + vite.config.
 - Trade-off accepted: no `npm update` for component fixes; re-run `add` and
   reconcile occasionally.
@@ -44,14 +44,14 @@ DataTables, range datepicker, most pre-built blocks; aesthetic ceiling lower).
 Skeleton if a central multi-theme engine ever matters more than bespoke art
 direction. daisyUI for fast/cheap marketing surfaces (CSS-only, no behavior).
 **Avoid**: SvelteUI (dead, no Svelte 5), Melt UI classic repo (legacy; successor
-`melt` has low momentum — Bits UI won the headless tier).
+`melt` has low momentum - Bits UI won the headless tier).
 
-## FastAPI `app.frontend()` — state of the art
+## FastAPI `app.frontend()` - state of the art
 
 - Shipped 0.138.0 (2026-06-20, PR #15800). ~18 real adopters found; **zero using
-  Svelte or Astro yet** — we'd be early, with the flagship being PrefectHQ/prefect
+  Svelte or Astro yet** - we'd be early, with the flagship being PrefectHQ/prefect
   (React). The docs explicitly bless Svelte and Astro.
-- It serves a **built static dir only** — no HMR, no dev proxying. Dev mode is two
+- It serves a **built static dir only** - no HMR, no dev proxying. Dev mode is two
   processes (uvicorn + vite dev with proxy); `.frontend()` is the production/
   single-port story. This matches the plan doc's topology exactly.
 - Semantics worth knowing: path operations always outrank frontend files;
@@ -64,7 +64,7 @@ direction. daisyUI for fast/cheap marketing surfaces (CSS-only, no behavior).
 ```python
 # server/main.py
 app = FastAPI()
-# WS route registered normally — ordinary routes outrank the frontend fallback.
+# WS route registered normally - ordinary routes outrank the frontend fallback.
 # Keep /ws directly on app: prefixed APIRouter WebSocket routes have a
 # long-standing prefix bug (fastapi#2634/#2639).
 
@@ -84,36 +84,36 @@ server: {
 
 ### Gotchas catalogued (all dodgeable)
 
-1. **Pin `fastapi>=0.139.1`** — earlier, deep links containing a dot broke the SPA
+1. **Pin `fastapi>=0.139.1`** - earlier, deep links containing a dot broke the SPA
    fallback.
-2. **WebSocket + APIRouter prefix bug** — register `/ws` directly on the app.
-3. **Vite ws proxy upgrade flakiness** (vitejs/vite#20223 on some versions) —
+2. **WebSocket + APIRouter prefix bug** - register `/ws` directly on the app.
+3. **Vite ws proxy upgrade flakiness** (vitejs/vite#20223 on some versions) -
    "does /ws connect through the dev proxy" is an explicit Phase 1 check.
-4. **`check_dir=True` (default) validates at app creation** — guard with
+4. **`check_dir=True` (default) validates at app creation** - guard with
    `is_dir()` (as above) or `check_dir=False` so the API boots without a build.
-5. No documented caching story (Cache-Control/ETag) — irrelevant for local use.
+5. No documented caching story (Cache-Control/ETag) - irrelevant for local use.
 
 ### Reference repos (closest to our shape)
 
-- **coloco-kit/coloco** — plain Svelte 5 SPA (not Kit) + Tailwind v4 + FastAPI;
+- **coloco-kit/coloco** - plain Svelte 5 SPA (not Kit) + Tailwind v4 + FastAPI;
   the exact architecture; its static-serve helper is a one-line swap for
   `app.frontend()`. https://github.com/coloco-kit/coloco
-- PrefectHQ/prefect `src/prefect/server/api/server.py` — production-grade
+- PrefectHQ/prefect `src/prefect/server/api/server.py` - production-grade
   multi-bundle serving. https://github.com/PrefectHQ/prefect
-- getkanchi/kanchi — WS routes + frontend coexistence, runtime config injection.
+- getkanchi/kanchi - WS routes + frontend coexistence, runtime config injection.
   https://github.com/getkanchi/kanchi
-- twtrubiks/mongo-fastapi-svelte-chat — FastAPI + Svelte 5 WebSocket realtime
+- twtrubiks/mongo-fastapi-svelte-chat - FastAPI + Svelte 5 WebSocket realtime
   reference (SvelteKit BFF flavor). https://github.com/twtrubiks/mongo-fastapi-svelte-chat
 
 ## Svelte vs Astro (for the real estate project)
 
 - Community consensus 2026: Svelte SPA for interactive real-time apps (DuoVoice);
-  **Astro for content/SEO-heavy sites** — content collections, zero JS by default.
+  **Astro for content/SEO-heavy sites** - content collections, zero JS by default.
 - **Astro officially supports Svelte 5 components as islands** (@astrojs/svelte v6,
   `client:load`/`client:visible`). One skill set covers both app shapes.
 - Both build to static output FastAPI can serve. Config nuance: Svelte SPA wants
   `fallback="index.html"`; Astro builds want `fallback="auto"` or `"404.html"`
-  (Astro emits one HTML file per route — an index.html catch-all is wrong there).
+  (Astro emits one HTML file per route - an index.html catch-all is wrong there).
 
 ## Morning links (click over coffee)
 

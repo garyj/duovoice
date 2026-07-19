@@ -23,7 +23,7 @@ as a learning exercise.
 
 - `wss://api.openai.com/v1/realtime/translations?model=gpt-realtime-translate`
 - Auth: `Authorization: Bearer <key>` header on the WS upgrade (server-side, so no
-  browser auth problem; key stays in `.env.local`, never reaches the client — the
+  browser auth problem; key stays in `.env.local`, never reaches the client - the
   localStorage key UI from the old app disappears entirely).
 - Audio both directions: base64 PCM16 mono 24 kHz.
 - Configure per session (the only knob that matters is `output.language`):
@@ -36,7 +36,7 @@ as a learning exercise.
 ```
 
 - Client → server events: `session.update`, `session.input_audio_buffer.append`,
-  `session.close`. Note the `session.` prefix — this endpoint differs from the
+  `session.close`. Note the `session.` prefix - this endpoint differs from the
   standard Realtime API.
 - Server → client events: `session.created`, `session.updated`, `session.closed`,
   `session.input_transcript.delta`, `session.output_transcript.delta`,
@@ -105,18 +105,18 @@ Dev mode: `vite dev` (:5173) proxying `/ws` to uvicorn (:8000). Call mode:
 
 ## Phases (each ends runnable; commit per phase; one GitHub issue per phase)
 
-1. **Skeleton** — uv project, FastAPI + `app.frontend()`, Svelte scaffold, dev proxy,
+1. **Skeleton** - uv project, FastAPI + `app.frontend()`, Svelte scaffold, dev proxy,
    browser↔server WS echo. Verify: echo works in dev mode and built mode.
-2. **Probe** — `probe.py` + TTS fixtures. Streams a WAV, prints a timestamped event
+2. **Probe** - `probe.py` + TTS fixtures. Streams a WAV, prints a timestamped event
    timeline, saves output audio + raw event JSONL. Verify: answers the empirical
    questions below; recordings become test fixtures.
-3. **Relay** — `translator.py` wired to `/ws`, two sessions, fan-out/fan-in.
+3. **Relay** - `translator.py` wired to `/ws`, two sessions, fan-out/fan-in.
    Verify: pytest replay tests green; fixture WAV through the full stack yields
    translated audio + transcripts.
-4. **Frontend audio** — worklet port, playback scheduling, transcripts, status.
+4. **Frontend audio** - worklet port, playback scheduling, transcripts, status.
    Verify: E2E via Chrome fake-mic flags (`--use-file-for-fake-audio-capture`):
    fixture "spoken" into the page produces on-screen transcripts + audio.
-5. **Hardening** — session reconnect on drop, clean shutdown, production build + CSP.
+5. **Hardening** - session reconnect on drop, clean shutdown, production build + CSP.
    Verify: kill an OpenAI socket mid-stream → auto-reconnect; `npm run build` +
    one-port mode works end to end.
 
@@ -128,7 +128,7 @@ Dev mode: `vite dev` (:5173) proxying `/ws` to uvicorn (:8000). Call mode:
    sample WAV for garyj to judge by ear.
 3. **Same-language silence**: PT audio into the PT-target session must yield (near)
    silence. This is the no-gate design's load-bearing assumption. If it fails, the
-   fallback is a transcript-based gate in the relay — build only if needed.
+   fallback is a transcript-based gate in the relay - build only if needed.
 4. **Noise reduction A/B**: `near_field` vs `far_field` with the mixed near/far input
    (garyj close, iPhone across the desk).
 
@@ -142,7 +142,7 @@ Dev mode: `vite dev` (:5173) proxying `/ws` to uvicorn (:8000). Call mode:
 - Machines verify timing and plumbing; humans judge translation quality. Final
   acceptance is a scripted 10-minute live WhatsApp test call with a checklist
   (turn-taking, overlap, numbers/addresses, mid-sentence language switch, feedback
-  check with real phone-speaker acoustics) — garyj runs this, not the agent.
+  check with real phone-speaker acoustics) - garyj runs this, not the agent.
 
 ## Out of scope (deliberately)
 
@@ -152,7 +152,7 @@ Dev mode: `vite dev` (:5173) proxying `/ws` to uvicorn (:8000). Call mode:
   open; nothing is designed for it now.
 - Video anything. WhatsApp keeps doing video; this app is audio + text alongside.
 - Multi-conversation history, settings UI, deploy, auth. (A minimal key-entry
-  input returns with the BYOK deploy — one field + localStorage, nothing more.)
+  input returns with the BYOK deploy - one field + localStorage, nothing more.)
 - Language-pair configuration UI (two string constants in `translator.py`).
 
 ## Overnight guardrails
@@ -169,19 +169,19 @@ The server is a long-lived WebSocket relay, which rules out classic FaaS and
 makes always-on containers (Fargate-style) needlessly expensive. Candidates,
 in preference order:
 
-1. **Fly.io Sydney, scale-to-zero machines** — container unchanged, fly.toml +
+1. **Fly.io Sydney, scale-to-zero machines** - container unchanged, fly.toml +
    Dockerfile + GitHub Actions (all IaC), cents/month idle, ~12 ms from
    Melbourne. Recommended.
 2. **AWS serverless re-architecture** (CDK portfolio piece): S3 + CloudFront
    static site, Lambda minting OpenAI client secrets via the translations
    `/client_secrets` flow, browser ↔ OpenAI direct WebRTC. True $0 idle, but
-   the server-side relay/brain disappears — a different architecture.
-3. **Cloudflare hybrid** — Pages (free) for the frontend; relay needs Python
+   the server-side relay/brain disappears - a different architecture.
+3. **Cloudflare hybrid** - Pages (free) for the frontend; relay needs Python
    Workers (bleeding-edge) or Cloudflare Containers (new). Melbourne edge.
 
 **Key model for public deploys: BYOK relay.** The browser keeps the user's
 OpenAI key in localStorage (as the old app did) and sends it as the first
-message over the established WSS connection — never in a URL or header. The
+message over the established WSS connection - never in a URL or header. The
 server holds it in memory for that session only (never logged, never
 persisted, redacted from errors) and uses it as the Bearer token on the two
 upstream sockets. Client key always wins; the server's `.env.local` key is a
