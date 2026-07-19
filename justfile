@@ -7,11 +7,15 @@ install:
     uv sync
     npm --prefix frontend install
 
-# run api + frontend + client-regen watcher together (Ctrl-C stops all)
+# run api + frontend + client-regen watcher + live type-check (Ctrl-C stops all)
 dev:
     ./frontend/node_modules/.bin/concurrently -k \
-        -n api,web,client -c cyan,green,magenta \
-        "just api" "just web" "just watch-client"
+        -n api,web,client,check -c cyan,green,magenta,red \
+        "just api" "just web" "just watch-client" "just check-watch"
+
+# continuously type-check the frontend as files change
+check-watch:
+    cd frontend && npx svelte-check --tsconfig ./tsconfig.app.json --watch
 
 # run the FastAPI dev server alone (:8000, auto-reload on python changes)
 api:
@@ -25,9 +29,11 @@ web:
 client:
     cd frontend && npm run generate-client
 
-# regenerate the client automatically whenever server/ changes
+# regenerate the client automatically whenever server/ *.py changes
+# (--filter python ignores __pycache__, which uvicorn and export_schema
+# rewrite on import — without it the watcher retriggers itself)
 watch-client:
-    uv run watchfiles 'just client' server
+    uv run watchfiles --filter python 'just client' server
 
 # type-check the frontend (svelte-check + tsc)
 check:
