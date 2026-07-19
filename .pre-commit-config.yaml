@@ -1,0 +1,45 @@
+# Adapted from fastapi/full-stack-fastapi-template. Generated frontend client
+# (frontend/src/client/) is excluded from hygiene hooks, and the
+# generate-client hook keeps it in sync whenever server/ code is committed.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+        exclude: ^frontend/src/client/.*
+      - id: trailing-whitespace
+        exclude: ^frontend/src/client/.*
+
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --force-exclude --fix --exit-non-zero-on-fix
+        require_serial: true
+        language: system
+        types: [python]
+
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format --force-exclude
+        require_serial: true
+        language: system
+        types: [python]
+
+      - id: mypy
+        name: mypy check
+        entry: uv run mypy
+        require_serial: true
+        language: system
+        pass_filenames: false
+        files: ^server/
+
+      - id: generate-client
+        name: regenerate typed frontend client
+        entry: just client
+        language: system
+        pass_filenames: false
+        files: ^server/.*\.py$
