@@ -162,6 +162,28 @@ Dev mode: `vite dev` (:5173) proxying `/ws` to uvicorn (:8000). Call mode:
   brute-forced.
 - Morning report: findings table, PT sample location, PR link, honest status.
 
+## Deployment options (deferred; decision memo 2026-07-19)
+
+The server is a long-lived WebSocket relay, which rules out classic FaaS and
+makes always-on containers (Fargate-style) needlessly expensive. Candidates,
+in preference order:
+
+1. **Fly.io Sydney, scale-to-zero machines** — container unchanged, fly.toml +
+   Dockerfile + GitHub Actions (all IaC), cents/month idle, ~12 ms from
+   Melbourne. Recommended.
+2. **AWS serverless re-architecture** (CDK portfolio piece): S3 + CloudFront
+   static site, Lambda minting OpenAI client secrets via the translations
+   `/client_secrets` flow, browser ↔ OpenAI direct WebRTC. True $0 idle, but
+   the server-side relay/brain disappears — a different architecture.
+3. **Cloudflare hybrid** — Pages (free) for the frontend; relay needs Python
+   Workers (bleeding-edge) or Cloudflare Containers (new). Melbourne edge.
+
+Non-negotiables for any public deploy: auth in front (relay spends the
+server's OpenAI key, ~$4/hour of talk — Cloudflare Access or shared secret),
+and browser→server latency is noise vs the OpenAI leg, so region choice is
+about hygiene, not speed. For the core use case, localhost (+ cloudflared
+tunnel when needed) remains the $0 baseline.
+
 ## References
 
 - Official: [realtime-translation guide](https://developers.openai.com/api/docs/guides/realtime-translation) ·
