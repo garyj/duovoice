@@ -8,13 +8,21 @@ frontend fallback, so the API can never be shadowed by a static file.
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel
 
-app = FastAPI()
+# servers drives the generated client's baseUrl; "/" keeps requests same-origin
+# relative so the client works in dev (via the Vite proxy) and prod unchanged.
+app = FastAPI(servers=[{"url": "/"}])
 
 
-@app.get("/api/hello")
-async def hello() -> dict[str, str]:
-    return {"message": "Hello from FastAPI", "docs_hint": "see /docs"}
+class HelloReply(BaseModel):
+    message: str
+    docs_hint: str
+
+
+@app.get("/api/hello", operation_id="getHello")
+async def hello() -> HelloReply:
+    return HelloReply(message="Hello from FastAPI", docs_hint="see /docs")
 
 
 @app.websocket("/ws")

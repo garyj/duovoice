@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { getHello } from './client'
+
   const servedBy = location.port === '5173' ? 'Vite dev server (proxying to FastAPI on :8000)' : 'FastAPI via app.frontend()'
 
   let apiReply = $state('(not called yet)')
@@ -8,8 +10,9 @@
   let ws: WebSocket | null = null
 
   async function callApi() {
-    const res = await fetch('/api/hello')
-    apiReply = JSON.stringify(await res.json())
+    // generated function: URL, method, and response type all come from the schema
+    const { data } = await getHello()
+    apiReply = data ? `${data.message} — ${data.docs_hint}` : '(request failed)'
   }
 
   function connectWs() {
