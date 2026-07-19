@@ -19,8 +19,9 @@ The repo is mid-rewrite on branch `fastapi-rewrite`:
 
 Read `docs/plan/rewrite-fastapi-browser-translate.md` first - architecture,
 verified API shape, audio topology, phases, deployment/BYOK memo.
-`docs/plan/frontend-stack-research.md` holds the UI framework research
-(shadcn-svelte recommended).
+`docs/plan/frontend-stack-research.md` holds the UI framework research.
+Decision: **daisyUI** (custom theme, not a stock preset; garyj has its MCP
+server wired up - use it for component classes instead of guessing).
 
 ## Commands (the justfile is the interface)
 

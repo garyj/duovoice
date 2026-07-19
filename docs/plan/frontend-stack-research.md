@@ -4,9 +4,16 @@ Overnight research synthesis (2026-07-19, four research agents: ecosystem survey
 fit deep-dive, GitHub adopter search, web sweep). Written to serve both DuoVoice
 and the upcoming real estate project.
 
-## Decision summary (recommendations, pending garyj's sign-off)
+## Decision summary
 
-- **Component framework: shadcn-svelte** (on Bits UI) for both projects.
+- **DECIDED (garyj, 2026-07-19): daisyUI** - chosen over the shadcn-svelte
+  recommendation below for its official MCP server (agent-assisted UI work),
+  top maintenance health, and zero-friction fit for a plain Vite SPA. Custom
+  theme from day one (not a stock preset) to reach the premium-dark register;
+  pair with Bits UI as the behavior layer when the real estate app needs data
+  tables/date pickers/comboboxes. The shadcn analysis below is kept for
+  reference.
+- ~~Component framework: shadcn-svelte (on Bits UI) for both projects.~~
 - **DuoVoice frontend: plain Svelte 5 + Vite SPA + Tailwind v4**, served by
   `app.frontend("/", directory="frontend/dist", fallback="index.html")`.
 - **FastAPI pinned `>=0.139.1`** (fallback bug with dotted paths fixed there;
