@@ -29,9 +29,9 @@ repos:
         language: system
         types: [python]
 
-      - id: mypy
-        name: mypy check
-        entry: uv run mypy
+      - id: ty
+        name: ty check
+        entry: uv run ty check server
         require_serial: true
         language: system
         pass_filenames: false
