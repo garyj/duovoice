@@ -113,6 +113,9 @@ Dev mode: `vite dev` (:5173) proxying `/ws` to uvicorn (:8000). Call mode:
 2. **Probe** - `probe.py` + TTS fixtures. Streams a WAV, prints a timestamped event
    timeline, saves output audio + raw event JSONL. Verify: answers the empirical
    questions below; recordings become test fixtures.
+   **DONE 2026-07-19**. Findings in `phase2-probe-findings.md`. Key results:
+   protocol verified, same-language silence holds, output is a *simultaneous*
+   continuous stream (onset ~2.3s, PT is Brazilian). Fixtures under `fixtures/`.
 3. **Relay** - `translator.py` wired to `/ws`, two sessions, fan-out/fan-in.
    Verify: pytest replay tests green; fixture WAV through the full stack yields
    translated audio + transcripts.
