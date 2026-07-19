@@ -118,9 +118,12 @@ it instead of guessing class names:
 - `Figma-to-daisyUI`: converts a Figma design URL into daisyUI markup.
 
 The server needs `DAISYUI_BLUEPRINT_LICENSE` (and `FIGMA_TOKEN` for Figma) in
-the shell environment Claude Code launches from - repo `.env.local` does NOT
-work for MCP env expansion. If its tools are absent, that's the first thing
-to check.
+the process environment at launch. Locally that works via direnv: `.envrc`
+loads both env files into the shell. Convention: `.env.local` holds app
+runtime secrets (`OPENAI_API_KEY` - what a deploy platform would inject);
+`.env` holds dev-tooling tokens that never ship (MCP licenses). Keep keys
+disjoint between the two. If Blueprint tools are absent, a missing env var
+at launch is the first thing to check.
 
 Do NOT additionally install the `sveltejs/ai-tools` Claude Code plugin: the
 APM package (`apm.yml`) already delivers the same skills, agent, and MCP
