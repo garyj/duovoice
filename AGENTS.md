@@ -20,8 +20,9 @@ The repo is mid-rewrite on branch `fastapi-rewrite`:
 Read `docs/plan/rewrite-fastapi-browser-translate.md` first - architecture,
 verified API shape, audio topology, phases, deployment/BYOK memo.
 `docs/plan/frontend-stack-research.md` holds the UI framework research.
-Decision: **daisyUI** (custom theme, not a stock preset; garyj has its MCP
-server wired up - use it for component classes instead of guessing).
+UI stack decision: **daisyUI** for styling (custom theme, never a stock
+preset) + **Bits UI** for behavior-heavy components (dialogs etc.), skinned
+with daisyUI classes. See "Agent tooling" below before writing any UI markup.
 
 ## Commands (the justfile is the interface)
 
@@ -103,6 +104,27 @@ You MUST use this tool whenever writing Svelte code before sending it to the use
 
 Generates a Svelte Playground link with the provided code.
 After completing the code, ask the user if they want a playground link. Only call this tool after user confirmation and NEVER if code was written to files in their project.
+
+## Agent tooling
+
+The `daisyui-blueprint` MCP server is the authority on daisyUI markup - use
+it instead of guessing class names:
+
+- `daisyUI-Snippets`: component/layout/template/theme snippets. Takes nested
+  object syntax (`{"components": {"button": true}}`), not arrays. The
+  `themes.custom-theme` snippet defines the exact `@plugin "daisyui/theme"`
+  format our theme must follow; the `chat` component is the intended base for
+  transcript bubbles.
+- `Figma-to-daisyUI`: converts a Figma design URL into daisyUI markup.
+
+The server needs `DAISYUI_BLUEPRINT_LICENSE` (and `FIGMA_TOKEN` for Figma) in
+the shell environment Claude Code launches from - repo `.env.local` does NOT
+work for MCP env expansion. If its tools are absent, that's the first thing
+to check.
+
+Do NOT additionally install the `sveltejs/ai-tools` Claude Code plugin: the
+APM package (`apm.yml`) already delivers the same skills, agent, and MCP
+server; a second install would duplicate them.
 
 ## Legacy app notes
 
