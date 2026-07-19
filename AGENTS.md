@@ -117,6 +117,12 @@ it instead of guessing class names:
   transcript bubbles.
 - `Figma-to-daisyUI`: converts a Figma design URL into daisyUI markup.
 
+Bits UI has no MCP; it publishes per-component llms.txt endpoints instead.
+Before writing any Bits component, fetch its exact API from
+`https://bits-ui.com/docs/components/<name>/llms.txt` (index:
+https://bits-ui.com/llms.txt) - concepts from model knowledge, exact
+props from llms.txt, validation via svelte-autofixer.
+
 The server needs `DAISYUI_BLUEPRINT_LICENSE` (and `FIGMA_TOKEN` for Figma) in
 the process environment at launch. Locally that works via direnv: `.envrc`
 loads both env files into the shell. Convention: `.env.local` holds app
