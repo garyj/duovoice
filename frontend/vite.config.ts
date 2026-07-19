@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import tailwindcss from '@tailwindcss/vite'
@@ -6,6 +7,9 @@ import tailwindcss from '@tailwindcss/vite'
 // to uvicorn on :8000. In production FastAPI serves the built dist/ itself on
 // one port, so app code only ever uses relative URLs.
 export default defineConfig({
+  resolve: {
+    alias: { $lib: path.resolve(import.meta.dirname, 'src/lib') },
+  },
   plugins: [svelte(), tailwindcss()],
   server: {
     proxy: {

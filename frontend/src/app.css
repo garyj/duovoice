@@ -1,6 +1,13 @@
 @import "tailwindcss";
 @plugin "daisyui";
 
+/* Element typography lives here, once — never as utility strings in markup. */
+@layer base {
+  h1 { @apply text-3xl font-semibold tracking-tight; }
+  h2 { @apply text-lg font-semibold; }
+  p  { @apply text-sm leading-relaxed; }
+}
+
 /* DuoVoice custom theme: restrained dark, tight radii, mint primary. */
 @plugin "daisyui/theme" {
   name: "duovoice";

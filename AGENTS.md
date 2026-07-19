@@ -105,6 +105,18 @@ You MUST use this tool whenever writing Svelte code before sending it to the use
 Generates a Svelte Playground link with the provided code.
 After completing the code, ask the user if they want a playground link. Only call this tool after user confirmation and NEVER if code was written to files in their project.
 
+## Frontend conventions
+
+- UI primitives live in `frontend/src/lib/components/` (one file per
+  primitive, barrel `index.ts`, imported via `$lib/components`). Pages
+  compose components; a repeated utility string in page markup is a smell -
+  extend the component library instead.
+- Element typography (h1/h2/p) is defined once in `@layer base` in
+  `src/app.css`. Never re-style headings with utility classes in markup.
+- daisyUI modifier classes + Svelte 5 class arrays are the variant system.
+  No CVA/tailwind-variants unless a component is built on raw unstyled Bits
+  primitives (project decision).
+
 ## Agent tooling
 
 The `daisyui-blueprint` MCP server is the authority on daisyUI markup - use
