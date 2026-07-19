@@ -6,6 +6,7 @@ _default:
 install:
     uv sync
     npm --prefix frontend install
+    uv run prek install
 
 # run api + frontend + live type-check (Ctrl-C stops all).
 # After changing the API, run `just client` — the pre-commit hook also
