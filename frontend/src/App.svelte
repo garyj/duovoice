@@ -1,69 +1,171 @@
 <script lang="ts">
-  import { getHello } from './client'
-  import { Button, Card, LogPane, StatusDot } from '$lib/components'
+  import { tick } from 'svelte'
+  import { TranslatorSession, type RelayFrame } from '$lib/audio'
+  import { Button, ChatBubble } from '$lib/components'
 
-  const servedBy = location.port === '5173' ? 'Vite dev server (proxying to FastAPI on :8000)' : 'FastAPI via app.frontend()'
+  /** A stream silent for this long gets a fresh bubble on its next delta. */
+  const BUBBLE_GAP_MS = 2500
 
-  let apiReply = $state('(not called yet)')
-  let wsState = $state<'disconnected' | 'connected'>('disconnected')
-  let wsInput = $state('hello over the socket')
-  let wsLog = $state<string[]>([])
-  let ws: WebSocket | null = null
+  type CallState = 'idle' | 'connecting' | 'live' | 'ended'
 
-  async function callApi() {
-    // generated function: URL, method, and response type all come from the schema
-    const { data } = await getHello()
-    apiReply = data ? `${data.message} — ${data.docs_url}` : '(request failed)'
+  interface FeedEntry {
+    id: number
+    /** 'heard' for the mic transcript, otherwise a translation lang ('pt', 'en'). */
+    stream: string
+    text: string
   }
 
-  function connectWs() {
-    const scheme = location.protocol === 'https:' ? 'wss' : 'ws'
-    ws = new WebSocket(`${scheme}://${location.host}/ws`)
-    ws.onopen = () => (wsState = 'connected')
-    ws.onclose = () => (wsState = 'disconnected')
-    ws.onmessage = (e) => (wsLog = [...wsLog, `← ${e.data}`])
+  let callState = $state<CallState>('idle')
+  let errorMessage = $state('')
+  let warning = $state('')
+  let feed = $state<FeedEntry[]>([])
+  let feedEl = $state<HTMLElement | null>(null)
+
+  let session: TranslatorSession | null = null
+  let nextId = 0
+  /** Per-stream position of the open bubble in the feed and its last delta time. */
+  let cursors: Record<string, { index: number; last: number }> = {}
+
+  function appendDelta(stream: string, text: string) {
+    const now = Date.now()
+    const cursor = cursors[stream]
+    if (cursor && now - cursor.last <= BUBBLE_GAP_MS) {
+      feed[cursor.index].text += text
+      cursor.last = now
+    } else {
+      feed.push({ id: nextId++, stream, text })
+      cursors[stream] = { index: feed.length - 1, last: now }
+    }
   }
 
-  function sendWs() {
-    if (ws?.readyState !== WebSocket.OPEN) return
-    ws.send(wsInput)
-    wsLog = [...wsLog, `→ ${wsInput}`]
+  function handleFrame(frame: RelayFrame) {
+    if (frame.type === 'transcript_in') {
+      appendDelta('heard', frame.text)
+    } else if (frame.type === 'transcript_out') {
+      appendDelta(frame.lang, frame.text)
+    } else if (frame.type === 'status') {
+      if (frame.state === 'ended' && callState === 'live') {
+        const direction = frame.lang ? `The ${frame.lang.toUpperCase()} direction` : 'A translation direction'
+        warning = `${direction} dropped. Stop and start the call again to bring it back.`
+      }
+    } else if (frame.type === 'error') {
+      errorMessage = frame.lang ? `${frame.lang.toUpperCase()}: ${frame.message}` : frame.message
+    }
   }
+
+  async function startCall() {
+    callState = 'connecting'
+    errorMessage = ''
+    warning = ''
+    feed = []
+    cursors = {}
+    const starting = new TranslatorSession()
+    starting.onframe = handleFrame
+    starting.onclose = () => {
+      session = null
+      if (callState !== 'idle') callState = 'ended'
+    }
+    session = starting
+    try {
+      await starting.start()
+      if (session === starting) callState = 'live'
+      else starting.stop() // stopped mid-connect; tear down the late-arriving session
+    } catch (err) {
+      if (session === starting) {
+        session = null
+        errorMessage = err instanceof Error ? err.message : String(err)
+        callState = 'idle'
+      }
+    }
+  }
+
+  function stopCall() {
+    session?.stop()
+    session = null
+    callState = 'ended'
+  }
+
+  $effect.pre(() => {
+    // Reference every bubble's text so this re-runs as deltas stream in.
+    for (const entry of feed) void entry.text
+    if (!feedEl) return
+    // Follow the feed only if the user was already at the bottom.
+    if (feedEl.offsetHeight + feedEl.scrollTop > feedEl.scrollHeight - 40) {
+      tick().then(() => feedEl?.scrollTo(0, feedEl.scrollHeight))
+    }
+  })
 </script>
 
-<main class="mx-auto flex max-w-2xl flex-col gap-6 p-6 py-12">
-  <header>
-    <h1>FastAPI ↔ Svelte demo</h1>
-    <p class="mt-2 text-base-content/70">
-      This page was served by: <strong class="font-medium text-primary">{servedBy}</strong>
-    </p>
+<main class="mx-auto flex h-dvh max-w-2xl flex-col gap-4 p-6">
+  <header class="flex items-center justify-between">
+    <h1>Sther</h1>
+    <div class="flex items-center gap-2 text-sm text-base-content/70">
+      {#if callState === 'live'}
+        <span class="inline-grid *:[grid-area:1/1]">
+          <span class="status status-success animate-ping"></span>
+          <span class="status status-success"></span>
+        </span>
+        live
+      {:else if callState === 'connecting'}
+        <span class="status status-warning"></span>
+        connecting
+      {:else if callState === 'ended'}
+        <span class="status status-error"></span>
+        ended
+      {:else}
+        <span class="status"></span>
+        idle
+      {/if}
+    </div>
   </header>
 
-  <Card title="1. HTTP — FastAPI owns /api/*">
-    <Button class="self-start" onclick={callApi}>GET /api/hello</Button>
-    <LogPane text={apiReply} />
-  </Card>
+  {#if errorMessage}
+    <div role="alert" class="alert alert-error">
+      <span>{errorMessage}</span>
+    </div>
+  {/if}
 
-  <Card title="2. WebSocket — FastAPI owns /ws">
-    <StatusDot ok={wsState === 'connected'} label={wsState} />
-    {#if wsState === 'disconnected'}
-      <Button class="self-start" onclick={connectWs}>Connect</Button>
+  {#if warning}
+    <div role="alert" class="alert alert-warning">
+      <span>{warning}</span>
+    </div>
+  {/if}
+
+  <div bind:this={feedEl} class="flex-1 overflow-y-auto rounded-box bg-base-200 p-4">
+    {#if feed.length === 0}
+      {#if callState === 'live'}
+        <p class="text-base-content/60">Both directions are live - speak.</p>
+      {:else if callState === 'connecting'}
+        <p class="text-base-content/60">Connecting to the relay...</p>
+      {:else}
+        <p class="text-base-content/60">
+          Sther listens to the room and speaks live translations both ways: English becomes
+          Portuguese, Portuguese becomes English. Press Start to open both directions.
+        </p>
+      {/if}
     {:else}
-      <div class="flex items-center gap-2">
-        <input class="input flex-1" bind:value={wsInput} />
-        <Button variant="default" onclick={sendWs}>Send</Button>
-      </div>
+      {#each feed as entry (entry.id)}
+        <ChatBubble
+          side={entry.stream === 'heard' ? 'start' : 'end'}
+          header={entry.stream === 'heard' ? 'heard' : entry.stream.toUpperCase()}
+          primary={entry.stream !== 'heard'}
+          text={entry.text}
+        />
+      {/each}
     {/if}
-    <LogPane text={wsLog.join('\n')} tall />
-  </Card>
+  </div>
 
-  <Card title="3. Routing — the page owns everything else">
-    <p>
-      Try <a class="link link-primary" href="/api/hello" target="_blank">/api/hello</a> (FastAPI wins — path
-      operations are checked first) vs
-      <a class="link link-primary" href="/anything/else" target="_blank">/anything/else</a> (no route matches,
-      so the <code>fallback="index.html"</code> serves this page again — that's the
-      hook a client-side router would use).
-    </p>
-  </Card>
+  <div class="flex gap-2">
+    {#if callState === 'connecting'}
+      <Button disabled>
+        <span class="loading loading-spinner"></span>
+        Connecting
+      </Button>
+    {:else if callState !== 'live'}
+      <Button onclick={startCall}>Start</Button>
+    {/if}
+    {#if callState === 'connecting' || callState === 'live'}
+      <Button variant="default" onclick={stopCall}>Stop</Button>
+    {/if}
+  </div>
 </main>

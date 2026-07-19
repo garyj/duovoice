@@ -1,20 +1,30 @@
 /**
- * AudioWorkletProcessor that captures microphone audio in chunks,
- * downsamples to 16kHz, and converts to Int16 PCM before posting
- * to the main thread.
+ * AudioWorkletProcessor that captures microphone audio in ~42 ms chunks and
+ * converts Float32 → Int16 PCM before posting to the main thread.
  *
- * Uses a pre-allocated ring buffer to avoid GC pressure on the
- * real-time audio thread. All per-chunk DSP runs here so the
- * main thread only needs to base64-encode and send.
+ * The AudioContext that loads this worklet runs at 24 kHz (the translation
+ * endpoint's native rate), so no resampling happens here - the browser
+ * resamples the hardware stream into the context. `sampleRate` is asserted,
+ * not adapted: a mismatch is a bug in the context setup, not a case to
+ * handle silently.
+ *
+ * Uses a pre-allocated ring buffer to avoid GC pressure on the real-time
+ * audio thread (see docs/solutions/performance-issues/
+ * audio-pipeline-latency-optimization-20260131.md). All per-chunk DSP runs
+ * here so the main thread only needs to base64-encode and send.
  */
+const TARGET_RATE = 24000;
+
 class AudioCaptureProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
-    this._bufferSize = 2048;
+    this._bufferSize = 1024; // ~42 ms at 24 kHz
     this._buffer = new Float32Array(this._bufferSize);
     this._writeIndex = 0;
     // sampleRate is a read-only global in AudioWorkletGlobalScope
-    this._inputRate = sampleRate;
+    if (sampleRate !== TARGET_RATE) {
+      throw new Error(`audio-processor expects a ${TARGET_RATE} Hz context, got ${sampleRate}`);
+    }
   }
 
   process(inputs) {
@@ -43,38 +53,17 @@ class AudioCaptureProcessor extends AudioWorkletProcessor {
   }
 
   /**
-   * Downsample the float buffer to 16kHz and convert to Int16 PCM.
+   * Convert the float buffer to Int16 PCM with a hard clamp.
    * Returns a Uint8Array view over the Int16 data for transferability.
    */
   _processChunk() {
-    const inputRate = this._inputRate;
-    let samples;
-
-    if (inputRate === 16000) {
-      samples = this._buffer;
-    } else {
-      const ratio = inputRate / 16000;
-      const newLength = Math.ceil(this._bufferSize / ratio);
-      samples = new Float32Array(newLength);
-
-      for (let i = 0; i < newLength; i++) {
-        const pos = i * ratio;
-        const idx = Math.floor(pos);
-        const next = Math.min(idx + 1, this._bufferSize - 1);
-        const frac = pos - idx;
-        samples[i] = this._buffer[idx] * (1 - frac) + this._buffer[next] * frac;
-      }
-    }
-
-    // Float32 → Int16 PCM with hard clamp
-    const int16 = new Int16Array(samples.length);
-    for (let i = 0; i < samples.length; i++) {
-      let s = samples[i];
+    const int16 = new Int16Array(this._bufferSize);
+    for (let i = 0; i < this._bufferSize; i++) {
+      let s = this._buffer[i];
       if (s > 1) s = 1;
       if (s < -1) s = -1;
       int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
     }
-
     return new Uint8Array(int16.buffer);
   }
 }
