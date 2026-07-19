@@ -7,11 +7,13 @@ install:
     uv sync
     npm --prefix frontend install
 
-# run api + frontend + client-regen watcher + live type-check (Ctrl-C stops all)
+# run api + frontend + live type-check (Ctrl-C stops all).
+# After changing the API, run `just client` — the pre-commit hook also
+# regenerates it automatically when server/ files are part of a commit.
 dev:
     ./frontend/node_modules/.bin/concurrently -k \
-        -n api,web,client,check -c cyan,green,magenta,red \
-        "just api" "just web" "just watch-client" "just check-watch"
+        -n api,web,check -c cyan,green,red \
+        "just api" "just web" "just check-watch"
 
 # continuously type-check the frontend as files change
 check-watch:
@@ -28,12 +30,6 @@ web:
 # regenerate the typed TS client from the FastAPI schema (one-shot)
 client:
     cd frontend && npm run generate-client
-
-# regenerate the client automatically whenever server/ *.py changes
-# (--filter python ignores __pycache__, which uvicorn and export_schema
-# rewrite on import — without it the watcher retriggers itself)
-watch-client:
-    uv run watchfiles --filter python 'just client' server
 
 # type-check the frontend (svelte-check + tsc)
 check:
