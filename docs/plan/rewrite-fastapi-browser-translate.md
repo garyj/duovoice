@@ -25,6 +25,8 @@ as a learning exercise.
 - Auth: `Authorization: Bearer <key>` header on the WS upgrade (server-side, so no
   browser auth problem; key stays in `.env.local`, never reaches the client - the
   localStorage key UI from the old app disappears entirely).
+- Also send `OpenAI-Safety-Identifier: <opaque end-user id>` on the upgrade (the
+  official guide asks for it); the relay uses a SHA-256 of the paying key.
 - Audio both directions: base64 PCM16 mono 24 kHz.
 - Configure per session (the only knob that matters is `output.language`):
 
@@ -40,12 +42,22 @@ as a learning exercise.
   standard Realtime API.
 - Server → client events: `session.created`, `session.updated`, `session.closed`,
   `session.input_transcript.delta`, `session.output_transcript.delta`,
-  `session.output_audio.delta` (~200 ms frames), `error`.
+  `session.output_audio.delta` (the guide says 200 ms frames; probe recordings
+  show 400 ms - treat the size as non-contractual), `error`.
+- Lifecycle: `session.close` flushes pending output; keep reading until
+  `session.closed` (per the guide) but don't rely on it arriving - one probe
+  recording never received it. The relay drains with a 5 s cap.
+- Limits: tier 1 allows 50 audio-minutes/min (two live sessions consume 2);
+  `expires_at` in `session.created` lands ~60 min out (observed), so calls
+  longer than an hour need the Phase 5 reconnect.
 - Source language is auto-detected. One target language per session, so bidirectional
   EN ↔ PT = two sessions fed the same audio.
 - Same-language input → the model stays silent (corroborated by the official cookbook
   and independent testing). This replaces the language-gate logic entirely. Verified
   empirically in Phase 2 before the relay depends on it.
+- Every session transcribes the input it hears, even while staying translation-
+  silent (fixture-proven), so the relay forwards the input transcript from one
+  designated session only or the browser would see every line twice.
 - No custom prompting, no voice selection (output mimics the source speaker's tone).
 - Cost: $0.034/min per session ⇒ ~$0.068/min (~$4/hour) with both directions live.
 
@@ -79,7 +91,9 @@ Browser (dumb terminal)                FastAPI (the brain)
 Browser↔server wire protocol: plain JSON frames, no versioned envelope.
 Up: `{"type": "audio", "pcm16": "<base64>"}`.
 Down: `{"type": "audio" | "transcript_in" | "transcript_out" | "status" | "error", ...}`
-with a `lang` field on audio/transcript frames.
+with a `lang` field on audio/transcript_out frames; `transcript_in` carries no
+lang (the source language is auto-detected upstream) and comes from the
+designated session only.
 
 ## File layout (complete)
 
@@ -119,6 +133,13 @@ Dev mode: `vite dev` (:5173) proxying `/ws` to uvicorn (:8000). Call mode:
 3. **Relay** - `translator.py` wired to `/ws`, two sessions, fan-out/fan-in.
    Verify: pytest replay tests green; fixture WAV through the full stack yields
    translated audio + transcripts.
+   **DONE 2026-07-19.** `TranslationSession` + `Relay` replace the /ws echo;
+   replay tests cover both directions, same-language silence, the missing
+   `session.closed` case, and the endpoint end to end. Both fixtures verified
+   live through the running relay (translated speech + transcripts back,
+   opposite session silent). BYOK (issue #2's client-key-first-message)
+   deferred to the deploy work per garyj (2026-07-19); the key stays
+   server-side in `.env.local` until then.
 4. **Frontend audio** - worklet port, playback scheduling, transcripts, status.
    Verify: E2E via Chrome fake-mic flags (`--use-file-for-fake-audio-capture`):
    fixture "spoken" into the page produces on-screen transcripts + audio.

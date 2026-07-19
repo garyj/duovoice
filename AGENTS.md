@@ -30,6 +30,8 @@ just install   # uv sync + npm install + prek hooks
 just           # dev stack: api (:8000) + web (:5173) + client watcher + live check
 just client    # regenerate the typed TS client from the FastAPI schema
 just check     # one-shot svelte-check + tsc (the definitive answer)
+just test      # python test suite (offline; never hits the paid API)
+just probe     # stream a fixture through one real session (paid, on-demand)
 just serve     # production mode: build + single-port FastAPI (:8000)
 ```
 
@@ -39,9 +41,12 @@ for public deploys - see plan doc).
 ## Architecture
 
 Browser is a dumb terminal (mic capture, playback, transcripts). FastAPI is
-the brain: it will hold two concurrent `gpt-realtime-translate` WebSocket
-sessions (one per direction) fed the same mic audio. `/ws` is currently an
-echo placeholder - the relay is the next build phase.
+the brain: `/ws` runs the two-session relay (`server/translator.py`) - two
+concurrent `gpt-realtime-translate` WebSocket sessions (one per direction)
+fed the same mic audio, translated audio + transcripts fanned back. The wire
+protocol is documented in the plan doc and `translator.py`'s docstring. The
+frontend still shows the Phase 1 echo demo UI; rebuilding it on the relay is
+Phase 4 (issue #3).
 
 Dev mode: Vite (:5173) proxies `/api` and `/ws` to uvicorn (:8000). Prod:
 `app.frontend()` serves `frontend/dist` single-port.
