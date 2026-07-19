@@ -152,7 +152,9 @@ Dev mode: `vite dev` (:5173) proxying `/ws` to uvicorn (:8000). Call mode:
   open; nothing is designed for it now.
 - Video anything. WhatsApp keeps doing video; this app is audio + text alongside.
 - Multi-conversation history, settings UI, deploy, auth. (A minimal key-entry
-  input returns with the BYOK deploy - one field + localStorage, nothing more.)
+  dialog returns with the BYOK deploy: a Bits UI Dialog skinned with daisyUI
+  classes, one field + localStorage. Deliberately the project's first Bits UI
+  component, as a learning taste of the daisy+Bits pairing.)
 - Language-pair configuration UI (two string constants in `translator.py`).
 
 ## Overnight guardrails
