@@ -1,0 +1,396 @@
+lockfile_version: '1'
+generated_at: '2026-07-19T04:51:22.462274+00:00'
+apm_version: 0.25.0
+dependencies:
+- repo_url: sveltejs/ai-tools
+  name: svelte
+  host: github.com
+  resolved_commit: 8152ed9fd4e8a8c2e7d9d65fb5c5f9eae290168b
+  version: 1.0.4
+  virtual_path: plugins/claude/svelte
+  is_virtual: true
+  package_type: marketplace_plugin
+  deployed_files:
+  - .agents/skills/svelte-code-writer
+  - .agents/skills/svelte-code-writer/SKILL.md
+  - .agents/skills/svelte-core-bestpractices
+  - .agents/skills/svelte-core-bestpractices/SKILL.md
+  - .agents/skills/svelte-core-bestpractices/references/$inspect.md
+  - .agents/skills/svelte-core-bestpractices/references/@attach.md
+  - .agents/skills/svelte-core-bestpractices/references/@render.md
+  - .agents/skills/svelte-core-bestpractices/references/await-expressions.md
+  - .agents/skills/svelte-core-bestpractices/references/bind.md
+  - .agents/skills/svelte-core-bestpractices/references/each.md
+  - .agents/skills/svelte-core-bestpractices/references/hydratable.md
+  - .agents/skills/svelte-core-bestpractices/references/snippet.md
+  - .agents/skills/svelte-core-bestpractices/references/svelte-reactivity.md
+  - .claude/agents/svelte-file-editor.md
+  - .claude/skills/svelte-code-writer
+  - .claude/skills/svelte-code-writer/SKILL.md
+  - .claude/skills/svelte-core-bestpractices
+  - .claude/skills/svelte-core-bestpractices/SKILL.md
+  - .claude/skills/svelte-core-bestpractices/references/$inspect.md
+  - .claude/skills/svelte-core-bestpractices/references/@attach.md
+  - .claude/skills/svelte-core-bestpractices/references/@render.md
+  - .claude/skills/svelte-core-bestpractices/references/await-expressions.md
+  - .claude/skills/svelte-core-bestpractices/references/bind.md
+  - .claude/skills/svelte-core-bestpractices/references/each.md
+  - .claude/skills/svelte-core-bestpractices/references/hydratable.md
+  - .claude/skills/svelte-core-bestpractices/references/snippet.md
+  - .claude/skills/svelte-core-bestpractices/references/svelte-reactivity.md
+  - .codex/agents/svelte-file-editor.toml
+  - .github/agents/svelte-file-editor.agent.md
+  deployed_file_hashes:
+    .agents/skills/svelte-code-writer/SKILL.md: sha256:cc8fa3ac4a382aeb1cda3e6e9244abe785ab0e3364105bf45ea8bbb94f4301bf
+    .agents/skills/svelte-core-bestpractices/SKILL.md: sha256:219fb2ca4add257da041c640ab18218f470bfc67ef24d04dcb879f87aaf38a1e
+    .agents/skills/svelte-core-bestpractices/references/$inspect.md: sha256:dfde53b9e3e49c6e08f2b827ca3e835dc92807033d0f0c3bd8fb70d03ef34182
+    .agents/skills/svelte-core-bestpractices/references/@attach.md: sha256:d5bdce1ce096814531444870d33a0f71e975971f88c08076010972372ff6729c
+    .agents/skills/svelte-core-bestpractices/references/@render.md: sha256:4fbd46b2834cf1ee4028ba97a00c27f1a4b68dd5eece430dd52cf2329bb402eb
+    .agents/skills/svelte-core-bestpractices/references/await-expressions.md: sha256:b5174624af983314468ad215cf731fadd1059202d4286a50d80144159246feb2
+    .agents/skills/svelte-core-bestpractices/references/bind.md: sha256:1469edf37edd305427467870c47f0a6d805f95660998376f7af019187d80df92
+    .agents/skills/svelte-core-bestpractices/references/each.md: sha256:5ba456d6a1655e361cb37de1575a56e2f04af7be61023e309747ec8a2e1b2c3e
+    .agents/skills/svelte-core-bestpractices/references/hydratable.md: sha256:7cb66827137d842acf99b34d1c565616dc2c706509e8ee4919bdca56068105b8
+    .agents/skills/svelte-core-bestpractices/references/snippet.md: sha256:15a07fbed5f18ad51dc43339c39941e4825e844b9b970138d2ddd4cc145caac6
+    .agents/skills/svelte-core-bestpractices/references/svelte-reactivity.md: sha256:621b9d2ab1e2128eea098f8aacebefd3165873383c545b07660e0ac60858a102
+    .claude/agents/svelte-file-editor.md: sha256:25140077052ea25ab518e7143be355cfcf1f9f25ca24dcac74676ec242951d4e
+    .claude/skills/svelte-code-writer/SKILL.md: sha256:cc8fa3ac4a382aeb1cda3e6e9244abe785ab0e3364105bf45ea8bbb94f4301bf
+    .claude/skills/svelte-core-bestpractices/SKILL.md: sha256:219fb2ca4add257da041c640ab18218f470bfc67ef24d04dcb879f87aaf38a1e
+    .claude/skills/svelte-core-bestpractices/references/$inspect.md: sha256:dfde53b9e3e49c6e08f2b827ca3e835dc92807033d0f0c3bd8fb70d03ef34182
+    .claude/skills/svelte-core-bestpractices/references/@attach.md: sha256:d5bdce1ce096814531444870d33a0f71e975971f88c08076010972372ff6729c
+    .claude/skills/svelte-core-bestpractices/references/@render.md: sha256:4fbd46b2834cf1ee4028ba97a00c27f1a4b68dd5eece430dd52cf2329bb402eb
+    .claude/skills/svelte-core-bestpractices/references/await-expressions.md: sha256:b5174624af983314468ad215cf731fadd1059202d4286a50d80144159246feb2
+    .claude/skills/svelte-core-bestpractices/references/bind.md: sha256:1469edf37edd305427467870c47f0a6d805f95660998376f7af019187d80df92
+    .claude/skills/svelte-core-bestpractices/references/each.md: sha256:5ba456d6a1655e361cb37de1575a56e2f04af7be61023e309747ec8a2e1b2c3e
+    .claude/skills/svelte-core-bestpractices/references/hydratable.md: sha256:7cb66827137d842acf99b34d1c565616dc2c706509e8ee4919bdca56068105b8
+    .claude/skills/svelte-core-bestpractices/references/snippet.md: sha256:15a07fbed5f18ad51dc43339c39941e4825e844b9b970138d2ddd4cc145caac6
+    .claude/skills/svelte-core-bestpractices/references/svelte-reactivity.md: sha256:621b9d2ab1e2128eea098f8aacebefd3165873383c545b07660e0ac60858a102
+    .codex/agents/svelte-file-editor.toml: sha256:92dbbb86b21ad6a91a9759c9056763ebb32ee63157d29fd63fe317614f21ba10
+    .github/agents/svelte-file-editor.agent.md: sha256:25140077052ea25ab518e7143be355cfcf1f9f25ca24dcac74676ec242951d4e
+  content_hash: sha256:4d26a6bfc607ce3b9f49276f59c4e4be008d452a6ff64f54348229619e429cc1
+deployments:
+- kind: project-relative
+  target: agents
+  value: .agents/skills/svelte-code-writer
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: null
+- kind: project-relative
+  target: agents
+  value: .agents/skills/svelte-code-writer/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:cc8fa3ac4a382aeb1cda3e6e9244abe785ab0e3364105bf45ea8bbb94f4301bf
+- kind: project-relative
+  target: agents
+  value: .agents/skills/svelte-core-bestpractices
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: null
+- kind: project-relative
+  target: agents
+  value: .agents/skills/svelte-core-bestpractices/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:219fb2ca4add257da041c640ab18218f470bfc67ef24d04dcb879f87aaf38a1e
+- kind: project-relative
+  target: agents
+  value: .agents/skills/svelte-core-bestpractices/references/$inspect.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:dfde53b9e3e49c6e08f2b827ca3e835dc92807033d0f0c3bd8fb70d03ef34182
+- kind: project-relative
+  target: agents
+  value: .agents/skills/svelte-core-bestpractices/references/@attach.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:d5bdce1ce096814531444870d33a0f71e975971f88c08076010972372ff6729c
+- kind: project-relative
+  target: agents
+  value: .agents/skills/svelte-core-bestpractices/references/@render.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:4fbd46b2834cf1ee4028ba97a00c27f1a4b68dd5eece430dd52cf2329bb402eb
+- kind: project-relative
+  target: agents
+  value: .agents/skills/svelte-core-bestpractices/references/await-expressions.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:b5174624af983314468ad215cf731fadd1059202d4286a50d80144159246feb2
+- kind: project-relative
+  target: agents
+  value: .agents/skills/svelte-core-bestpractices/references/bind.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:1469edf37edd305427467870c47f0a6d805f95660998376f7af019187d80df92
+- kind: project-relative
+  target: agents
+  value: .agents/skills/svelte-core-bestpractices/references/each.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:5ba456d6a1655e361cb37de1575a56e2f04af7be61023e309747ec8a2e1b2c3e
+- kind: project-relative
+  target: agents
+  value: .agents/skills/svelte-core-bestpractices/references/hydratable.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:7cb66827137d842acf99b34d1c565616dc2c706509e8ee4919bdca56068105b8
+- kind: project-relative
+  target: agents
+  value: .agents/skills/svelte-core-bestpractices/references/snippet.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:15a07fbed5f18ad51dc43339c39941e4825e844b9b970138d2ddd4cc145caac6
+- kind: project-relative
+  target: agents
+  value: .agents/skills/svelte-core-bestpractices/references/svelte-reactivity.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:621b9d2ab1e2128eea098f8aacebefd3165873383c545b07660e0ac60858a102
+- kind: project-relative
+  target: claude
+  value: .claude/agents/svelte-file-editor.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:25140077052ea25ab518e7143be355cfcf1f9f25ca24dcac74676ec242951d4e
+- kind: project-relative
+  target: claude
+  value: .claude/skills/svelte-code-writer
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/svelte-code-writer/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:cc8fa3ac4a382aeb1cda3e6e9244abe785ab0e3364105bf45ea8bbb94f4301bf
+- kind: project-relative
+  target: claude
+  value: .claude/skills/svelte-core-bestpractices
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: null
+- kind: project-relative
+  target: claude
+  value: .claude/skills/svelte-core-bestpractices/SKILL.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:219fb2ca4add257da041c640ab18218f470bfc67ef24d04dcb879f87aaf38a1e
+- kind: project-relative
+  target: claude
+  value: .claude/skills/svelte-core-bestpractices/references/$inspect.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:dfde53b9e3e49c6e08f2b827ca3e835dc92807033d0f0c3bd8fb70d03ef34182
+- kind: project-relative
+  target: claude
+  value: .claude/skills/svelte-core-bestpractices/references/@attach.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:d5bdce1ce096814531444870d33a0f71e975971f88c08076010972372ff6729c
+- kind: project-relative
+  target: claude
+  value: .claude/skills/svelte-core-bestpractices/references/@render.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:4fbd46b2834cf1ee4028ba97a00c27f1a4b68dd5eece430dd52cf2329bb402eb
+- kind: project-relative
+  target: claude
+  value: .claude/skills/svelte-core-bestpractices/references/await-expressions.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:b5174624af983314468ad215cf731fadd1059202d4286a50d80144159246feb2
+- kind: project-relative
+  target: claude
+  value: .claude/skills/svelte-core-bestpractices/references/bind.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:1469edf37edd305427467870c47f0a6d805f95660998376f7af019187d80df92
+- kind: project-relative
+  target: claude
+  value: .claude/skills/svelte-core-bestpractices/references/each.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:5ba456d6a1655e361cb37de1575a56e2f04af7be61023e309747ec8a2e1b2c3e
+- kind: project-relative
+  target: claude
+  value: .claude/skills/svelte-core-bestpractices/references/hydratable.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:7cb66827137d842acf99b34d1c565616dc2c706509e8ee4919bdca56068105b8
+- kind: project-relative
+  target: claude
+  value: .claude/skills/svelte-core-bestpractices/references/snippet.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:15a07fbed5f18ad51dc43339c39941e4825e844b9b970138d2ddd4cc145caac6
+- kind: project-relative
+  target: claude
+  value: .claude/skills/svelte-core-bestpractices/references/svelte-reactivity.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:621b9d2ab1e2128eea098f8aacebefd3165873383c545b07660e0ac60858a102
+- kind: project-relative
+  target: codex
+  value: .codex/agents/svelte-file-editor.toml
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:92dbbb86b21ad6a91a9759c9056763ebb32ee63157d29fd63fe317614f21ba10
+- kind: project-relative
+  target: copilot
+  value: .github/agents/svelte-file-editor.agent.md
+  runtime: null
+  scope: project
+  owners:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  active_owner: sveltejs/ai-tools/plugins/claude/svelte
+  content_hash: sha256:25140077052ea25ab518e7143be355cfcf1f9f25ca24dcac74676ec242951d4e
+- kind: uri
+  target: mcp
+  value: svelte
+  runtime: claude
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: null
+- kind: uri
+  target: mcp
+  value: svelte
+  runtime: codex
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: null
+- kind: uri
+  target: mcp
+  value: svelte
+  runtime: copilot
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: null
+- kind: uri
+  target: mcp
+  value: svelte
+  runtime: vscode
+  scope: project
+  owners:
+  - .
+  active_owner: .
+  content_hash: null
+mcp_servers:
+- svelte
+mcp_configs:
+  svelte:
+    name: svelte
+    transport: http
+    registry: false
+    url: https://mcp.svelte.dev/mcp
+mcp_target_servers:
+  claude:
+  - svelte
+  codex:
+  - svelte
+  copilot:
+  - svelte
+  vscode:
+  - svelte
+mcp_config_provenance:
+  svelte: svelte
+lsp_servers:
+- svelte
+lsp_configs:
+  svelte:
+    name: svelte
+    command: svelteserver
+    args:
+    - --stdio
+    extensionToLanguage:
+      .svelte: svelte

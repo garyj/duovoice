@@ -10,7 +10,8 @@ targets:
 - codex
 - copilot
 dependencies:
-  apm: []
+  apm:
+    - sveltejs/ai-tools/plugins/claude/svelte
   mcp: []
 includes: auto
 scripts: {}
