@@ -180,6 +180,9 @@ in preference order:
    the server-side relay/brain disappears - a different architecture.
 3. **Cloudflare hybrid** - Pages (free) for the frontend; relay needs Python
    Workers (bleeding-edge) or Cloudflare Containers (new). Melbourne edge.
+   garyj's stated preference for the eventual Cloudflare deploy: Pages
+   serving the static frontend with CORS + the FastAPI relay as a separate
+   container service. Single-container ships first regardless.
 
 **Key model for public deploys: BYOK relay.** The browser keeps the user's
 OpenAI key in localStorage (as the old app did) and sends it as the first

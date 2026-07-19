@@ -11,11 +11,10 @@ running alongside a WhatsApp call on his iPhone (computer mic hears both
 speakers; computer speakers carry both translations). This is a critical
 communication tool - change carefully, verify thoroughly.
 
-The repo is mid-rewrite on branch `fastapi-rewrite`:
-
-- **New app**: `server/` (FastAPI relay) + `frontend/` (Svelte 5 + Vite SPA).
-- **Legacy app**: the React + Gemini files at the repo root are superseded and
-  slated for deletion (pending garyj's approval). Don't extend them.
+The repo is mid-rewrite on branch `fastapi-rewrite`: `server/` (FastAPI
+relay) + `frontend/` (Svelte 5 + Vite SPA). The legacy React + Gemini app was
+removed from this branch (2026-07-19); it lives on in `master` and git
+history if reference is needed.
 
 Read `docs/plan/rewrite-fastapi-browser-translate.md` first - architecture,
 verified API shape, audio topology, phases, deployment/BYOK memo.
@@ -147,9 +146,10 @@ Do NOT additionally install the `sveltejs/ai-tools` Claude Code plugin: the
 APM package (`apm.yml`) already delivers the same skills, agent, and MCP
 server; a second install would duplicate them.
 
-## Legacy app notes
+## Audio worklet notes
 
-`docs/solutions/performance-issues/audio-pipeline-latency-optimization-*.md`
-remains authoritative for porting `public/audio-processor.js` (pre-allocated
-ring buffer - keep it a typed array; retarget 16 kHz → 24 kHz; browser echo
+`frontend/public/audio-processor.js` is the latency-tuned worklet carried
+over from the legacy app; `docs/solutions/performance-issues/audio-pipeline-latency-optimization-*.md`
+remains its authoritative documentation (pre-allocated ring buffer - keep it
+a typed array; retarget 16 kHz → 24 kHz for the new model; browser echo
 cancellation is load-bearing for the feedback-loop design).
