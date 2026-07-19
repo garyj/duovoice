@@ -8,9 +8,9 @@
   p  { @apply text-sm leading-relaxed; }
 }
 
-/* DuoVoice custom theme: restrained dark, tight radii, mint primary. */
+/* Sther custom theme: restrained dark, tight radii, mint primary. */
 @plugin "daisyui/theme" {
-  name: "duovoice";
+  name: "sther";
   default: true;
   prefersdark: true;
   color-scheme: dark;

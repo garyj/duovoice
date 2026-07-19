@@ -5,7 +5,7 @@ symlinks here; keep it that way.
 
 ## What This Is
 
-DuoVoice: a real-time English ↔ Portuguese voice translator. It is the primary
+Sther: a real-time English ↔ Portuguese voice translator. It is the primary
 way garyj communicates with his friend across a language barrier, typically
 running alongside a WhatsApp call on his iPhone (computer mic hears both
 speakers; computer speakers carry both translations). This is a critical

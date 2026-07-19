@@ -1,4 +1,4 @@
-# DuoVoice
+# Sther
 
 Real-time English ↔ Portuguese voice translator, built to run alongside a
 phone call: speak in one language, the other side hears theirs.

@@ -1,7 +1,7 @@
 # Frontend stack research: Svelte UI frameworks + FastAPI `app.frontend()`
 
 Overnight research synthesis (2026-07-19, four research agents: ecosystem survey,
-fit deep-dive, GitHub adopter search, web sweep). Written to serve both DuoVoice
+fit deep-dive, GitHub adopter search, web sweep). Written to serve both Sther
 and the upcoming real estate project.
 
 ## Decision summary
@@ -14,7 +14,7 @@ and the upcoming real estate project.
   tables/date pickers/comboboxes. The shadcn analysis below is kept for
   reference.
 - ~~Component framework: shadcn-svelte (on Bits UI) for both projects.~~
-- **DuoVoice frontend: plain Svelte 5 + Vite SPA + Tailwind v4**, served by
+- **Sther frontend: plain Svelte 5 + Vite SPA + Tailwind v4**, served by
   `app.frontend("/", directory="frontend/dist", fallback="index.html")`.
 - **FastAPI pinned `>=0.139.1`** (fallback bug with dotted paths fixed there;
   `0.139.0` added dependency support on frontend routes).
@@ -31,9 +31,9 @@ and the upcoming real estate project.
   edit it. Best match for the stated goal of learning transferable patterns -
   "you edit the button by editing the button." Skills compound across projects.
 - **Best premium-dark aesthetic out of the box** (Linear/Vercel register), which is
-  the DuoVoice brief. No runtime style engine, no app shell: a custom waveform
+  the Sther brief. No runtime style engine, no app shell: a custom waveform
   canvas and Svelte transitions sit alongside it untouched.
-- DuoVoice only carries the components it uses (Button, Badge, Scroll Area, maybe
+- Sther only carries the components it uses (Button, Badge, Scroll Area, maybe
   Dialog) - minimal surface area for a critical live tool.
 - Real estate needs are all present: Data Table (TanStack), Pagination, Select,
   Combobox, Slider, Calendar/Date Picker, Card, Carousel, Dialog, forms via
@@ -114,7 +114,7 @@ server: {
 
 ## Svelte vs Astro (for the real estate project)
 
-- Community consensus 2026: Svelte SPA for interactive real-time apps (DuoVoice);
+- Community consensus 2026: Svelte SPA for interactive real-time apps (Sther);
   **Astro for content/SEO-heavy sites** - content collections, zero JS by default.
 - **Astro officially supports Svelte 5 components as islands** (@astrojs/svelte v6,
   `client:load`/`client:visible`). One skill set covers both app shapes.
