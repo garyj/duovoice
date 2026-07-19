@@ -4,11 +4,19 @@ version = "0.1.0"
 requires-python = ">=3.14"
 dependencies = [
     "fastapi[standard]>=0.139.1",
+    "python-dotenv>=1.2.2",
+    "websockets>=16.1.1",
 ]
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "prek>=0.4.8,<1.0.0",
+    "pytest>=9.1.1",
     "ruff>=0.15.22",
     "ty>=0.0.61",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

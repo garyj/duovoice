@@ -46,3 +46,16 @@ build:
 # serve the production build single-port from FastAPI (:8000)
 serve: build
     uv run uvicorn server.main:app --port 8000
+
+# stream a fixture WAV through one real translation session (hits the paid API)
+# e.g. just probe --fixture fixtures/en_greeting.wav --target pt --runs 3
+probe *ARGS:
+    uv run python -m server.probe {{ARGS}}
+
+# (re)generate the interim TTS probe fixtures (calls OpenAI TTS, a few cents)
+fixtures:
+    uv run python fixtures/generate.py
+
+# run the python test suite (offline; no paid API)
+test:
+    uv run pytest
