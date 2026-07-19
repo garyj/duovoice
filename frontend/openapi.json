@@ -37,15 +37,15 @@
             "type": "string",
             "title": "Message"
           },
-          "docs_hint": {
+          "docs_url": {
             "type": "string",
-            "title": "Docs Hint"
+            "title": "Docs Url"
           }
         },
         "type": "object",
         "required": [
           "message",
-          "docs_hint"
+          "docs_url"
         ],
         "title": "HelloReply"
       }

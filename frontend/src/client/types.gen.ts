@@ -13,9 +13,9 @@ export type HelloReply = {
      */
     message: string;
     /**
-     * Docs Hint
+     * Docs Url
      */
-    docs_hint: string;
+    docs_url: string;
 };
 
 export type GetHelloData = {

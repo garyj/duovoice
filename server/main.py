@@ -17,12 +17,12 @@ app = FastAPI(servers=[{"url": "/"}])
 
 class HelloReply(BaseModel):
     message: str
-    docs_hint: str
+    docs_url: str
 
 
 @app.get("/api/hello", operation_id="getHello")
 async def hello() -> HelloReply:
-    return HelloReply(message="Hello from FastAPI", docs_hint="see /docs")
+    return HelloReply(message="Hello from FastAPI", docs_url="see /docs")
 
 
 @app.websocket("/ws")

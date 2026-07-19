@@ -12,7 +12,7 @@
   async function callApi() {
     // generated function: URL, method, and response type all come from the schema
     const { data } = await getHello()
-    apiReply = data ? `${data.message} — ${data.docs_hint}` : '(request failed)'
+    apiReply = data ? `${data.message} — ${data.docs_url}` : '(request failed)'
   }
 
   function connectWs() {
