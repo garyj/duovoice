@@ -8,6 +8,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "prek>=0.4.8,<1.0.0",
     "ruff>=0.15.22",
     "ty>=0.0.61",
 ]
