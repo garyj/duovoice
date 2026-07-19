@@ -8,13 +8,16 @@ install:
     npm --prefix frontend install
     uv run prek install
 
-# run api + frontend + live type-check (Ctrl-C stops all).
-# After changing the API, run `just client` — the pre-commit hook also
-# regenerates it automatically when server/ files are part of a commit.
+# run api + frontend + client-regen watcher + live type-check (Ctrl-C stops all)
 dev:
     ./frontend/node_modules/.bin/concurrently -k \
-        -n api,web,check -c cyan,green,red \
-        "just api" "just web" "just check-watch"
+        -n api,web,client,check -c cyan,green,magenta,red \
+        "just api" "just web" "just watch-client" "just check-watch"
+
+# regenerate the client on server/ changes; each run completes before the
+# next starts (see server/watch_client.py — safe, unlike the watchfiles CLI)
+watch-client:
+    uv run python -m server.watch_client
 
 # continuously type-check the frontend as files change
 check-watch:
