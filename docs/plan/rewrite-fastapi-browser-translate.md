@@ -151,7 +151,8 @@ Dev mode: `vite dev` (:5173) proxying `/ws` to uvicorn (:8000). Call mode:
 - Two-device mode (her phone opens the page). The relay architecture keeps the door
   open; nothing is designed for it now.
 - Video anything. WhatsApp keeps doing video; this app is audio + text alongside.
-- Multi-conversation history, settings UI, key-entry UI, deploy, auth.
+- Multi-conversation history, settings UI, deploy, auth. (A minimal key-entry
+  input returns with the BYOK deploy — one field + localStorage, nothing more.)
 - Language-pair configuration UI (two string constants in `translator.py`).
 
 ## Overnight guardrails
@@ -178,11 +179,22 @@ in preference order:
 3. **Cloudflare hybrid** — Pages (free) for the frontend; relay needs Python
    Workers (bleeding-edge) or Cloudflare Containers (new). Melbourne edge.
 
-Non-negotiables for any public deploy: auth in front (relay spends the
-server's OpenAI key, ~$4/hour of talk — Cloudflare Access or shared secret),
-and browser→server latency is noise vs the OpenAI leg, so region choice is
-about hygiene, not speed. For the core use case, localhost (+ cloudflared
-tunnel when needed) remains the $0 baseline.
+**Key model for public deploys: BYOK relay.** The browser keeps the user's
+OpenAI key in localStorage (as the old app did) and sends it as the first
+message over the established WSS connection — never in a URL or header. The
+server holds it in memory for that session only (never logged, never
+persisted, redacted from errors) and uses it as the Bearer token on the two
+upstream sockets. Client key always wins; the server's `.env.local` key is a
+local-dev fallback only. Since users spend their own money, hard auth relaxes
+to a concurrent-session cap; the repo being open source makes the handling
+inspectable. README wording must be honest: the key transits the relay in
+memory, unlike the old browser-only app. (Endgame option if we ever want keys
+out of the relay entirely: the official `/client_secrets` WebRTC flow, at the
+cost of the server-side brain.)
+
+Browser→server latency is noise vs the OpenAI leg, so region choice is about
+hygiene, not speed. For the core use case, localhost (+ cloudflared tunnel
+when needed) remains the $0 baseline.
 
 ## References
 
