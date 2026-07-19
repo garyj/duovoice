@@ -107,6 +107,9 @@ Dev mode: `vite dev` (:5173) proxying `/ws` to uvicorn (:8000). Call mode:
 
 1. **Skeleton** - uv project, FastAPI + `app.frontend()`, Svelte scaffold, dev proxy,
    browser↔server WS echo. Verify: echo works in dev mode and built mode.
+   **DONE 2026-07-19**, plus beyond-plan extras: typed-client loop with
+   race-safe watcher + pre-commit regen hook, justfile dev stack, ruff/ty/prek,
+   daisyUI custom theme, component primitives, legacy app removed.
 2. **Probe** - `probe.py` + TTS fixtures. Streams a WAV, prints a timestamped event
    timeline, saves output audio + raw event JSONL. Verify: answers the empirical
    questions below; recordings become test fixtures.
