@@ -143,6 +143,11 @@ Dev mode: `vite dev` (:5173) proxying `/ws` to uvicorn (:8000). Call mode:
 4. **Frontend audio** - worklet port, playback scheduling, transcripts, status.
    Verify: E2E via Chrome fake-mic flags (`--use-file-for-fake-audio-capture`):
    fixture "spoken" into the page produces on-screen transcripts + audio.
+   **DONE 2026-07-19** (machine verification). `src/lib/audio.ts` +
+   24 kHz worklet + chat-bubble UI replace the echo demo; the fake-mic E2E
+   rendered heard + PT bubbles through the live relay. Still owed: garyj's
+   real-mic browser test (the AEC-on-desk-hardware question from issue #3's
+   terminal findings) and ultimately the live-call acceptance test.
 5. **Hardening** - session reconnect on drop, clean shutdown, production build + CSP.
    Verify: kill an OpenAI socket mid-stream → auto-reconnect; `npm run build` +
    one-port mode works end to end.

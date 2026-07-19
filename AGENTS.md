@@ -45,8 +45,9 @@ the brain: `/ws` runs the two-session relay (`server/translator.py`) - two
 concurrent `gpt-realtime-translate` WebSocket sessions (one per direction)
 fed the same mic audio, translated audio + transcripts fanned back. The wire
 protocol is documented in the plan doc and `translator.py`'s docstring. The
-frontend still shows the Phase 1 echo demo UI; rebuilding it on the relay is
-Phase 4 (issue #3).
+frontend (`src/lib/audio.ts` + `App.svelte`) is the live client: mic capture
+through the 24 kHz worklet, energy-gated playback, chat-bubble transcripts.
+Echo cancellation in getUserMedia is load-bearing - never disable it.
 
 Dev mode: Vite (:5173) proxies `/api` and `/ws` to uvicorn (:8000). Prod:
 `app.frontend()` serves `frontend/dist` single-port.
