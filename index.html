@@ -1,14 +1,78 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DuoVoice Live</title>
+    <meta
+      name="description"
+      content="Live English and Brazilian Portuguese speech translation."
+    />
+    <title>Sther | Live voice translation</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/index.css" />
   </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+  <body data-state="idle">
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Sther</p>
+          <h1>Speak naturally.<br />Hear the translation.</h1>
+          <p class="caption">
+            One shared microphone, translating English and Brazilian Portuguese
+            in both directions with native WebRTC audio.
+          </p>
+        </div>
+        <div class="actions">
+          <button id="start" class="primary" type="button">
+            Start listening
+          </button>
+          <button id="stop" class="secondary" type="button" disabled>
+            Stop
+          </button>
+        </div>
+      </header>
+
+      <section class="status-row" aria-live="polite">
+        <span class="status-dot" aria-hidden="true"></span>
+        <output id="status">Ready</output>
+        <span id="status-detail"></span>
+      </section>
+
+      <section class="transcripts" aria-label="Live translations">
+        <article class="transcript">
+          <p class="language-label">Português falado</p>
+          <h2 class="language-name">English</h2>
+          <p id="english-text" class="live-text" aria-live="polite"></p>
+        </article>
+        <article class="transcript">
+          <p class="language-label">Spoken English</p>
+          <h2 class="language-name">Português brasileiro</h2>
+          <p id="portuguese-text" class="live-text" aria-live="polite"></p>
+        </article>
+      </section>
+
+      <section class="source">
+        <h2>English heard on microphone</h2>
+        <p id="source-text" aria-live="polite"></p>
+      </section>
+
+      <details class="technical">
+        <summary>Connection details</summary>
+        <div class="technical-grid">
+          <p id="microphone-details">Waiting for microphone</p>
+          <pre id="diagnostics"></pre>
+        </div>
+      </details>
+
+      <footer class="footer">
+        <span>English ↔ Brazilian Portuguese</span>
+        <span>Powered by OpenAI realtime translation</span>
+      </footer>
+
+      <!-- biome-ignore lint/a11y/useMediaCaption: The live English panel captions this WebRTC stream. -->
+      <audio id="english-audio" autoplay aria-hidden="true"></audio>
+      <!-- biome-ignore lint/a11y/useMediaCaption: The live Portuguese panel captions this WebRTC stream. -->
+      <audio id="portuguese-audio" autoplay aria-hidden="true"></audio>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
