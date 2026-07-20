@@ -47,29 +47,29 @@ microphone cannot satisfy that recommendation. The dedicated translation model
 is a strong fit for one-way listening, broadcasts, or routed call participants,
 not this mixed two-way room conversation.
 
-## Echo control
+## Echo control and interruption
 
 Chrome captures the microphone with echo cancellation, noise suppression, and
 automatic gain control. The remote audio remains on the native WebRTC playback
 path so Chromium can use its normal acoustic echo cancellation reference.
 
-Browser echo cancellation is still imperfect with physical speakers. Sther
-therefore adds a deterministic half-duplex gate:
+Sther keeps the microphone live during output so either person can interrupt:
 
-1. Keep semantic VAD enabled, but disable its automatic response creation.
-2. Request a response only for a turn that began while microphone capture was
-   open and no response was active.
-3. Disable the outgoing microphone track before requesting that response.
-4. Delete any turn detected while capture is closed instead of responding to
-   it.
-5. Keep capture closed while the remote output buffer is playing and for two
-   seconds afterward, giving the speaker and echo canceller time to settle.
-6. If a response has no audio, apply the same tail after `response.done`.
+1. Semantic VAD detects speech while `interrupt_response` is enabled.
+2. OpenAI clears the WebRTC output buffer and truncates unplayed audio when a
+   new speaker interrupts.
+3. Automatic response creation remains disabled.
+4. After the interrupted turn is committed, the browser requests the next
+   response. If the previous response is still closing, that request waits for
+   `response.done`.
+5. A committed item without a matching speech-start event is deleted rather
+   than translated.
 
-This prevents the interpreter from translating itself even when speaker output
-reaches the microphone. The tradeoff is intentional: a person cannot interrupt
-while the translation is speaking. Reliability is more important than barge-in
-for this application.
+Keeping the microphone open also keeps Chrome's acoustic echo canceller active
+instead of forcing it to settle after every translation. This restores natural
+barge-in while retaining explicit control over which committed turns receive a
+response. It still depends on the browser and physical audio path suppressing
+speaker return, so acoustic loop testing is required for every change here.
 
 ## Authentication and protocol
 
@@ -116,6 +116,7 @@ The browser capture pattern was compared against current official sources:
 - [OpenAI Realtime translation cookbook](https://github.com/openai/openai-cookbook/tree/main/examples/voice_solutions/realtime_translation_guide)
 - [OpenAI semantic VAD guide](https://developers.openai.com/api/docs/guides/realtime-vad#semantic-vad)
 - [OpenAI Realtime conversations guide](https://developers.openai.com/api/docs/guides/realtime-conversations#keep-vad-but-disable-automatic-responses)
+- [OpenAI interruption and truncation guide](https://developers.openai.com/api/docs/guides/realtime-conversations#interruption-and-truncation)
 - [OpenAI Realtime server events](https://developers.openai.com/api/reference/resources/realtime/server-events)
 
 The official Realtime Console and Realtime Voice Component both use ordinary
@@ -138,7 +139,7 @@ microphone. That proved one session and browser echo cancellation were not
 sufficient by themselves. Automatic response creation was then disabled and
 the browser became responsible for accepting or rejecting detected turns.
 
-The final headed Chrome run used a PipeWire null sink as both the browser's
+The half-duplex headed Chrome run used a PipeWire null sink as both the browser's
 speaker and microphone source. This deliberately fed every output sample back
 toward Chrome without making sound in the room. The run verified:
 
@@ -150,4 +151,15 @@ toward Chrome without making sound in the room. The run verified:
   after each translation.
 - Stop released the microphone and cleared the remote audio stream.
 - Start established a fresh session after Stop.
+- Chrome reported no console errors or page errors.
+
+Real conversation use then showed that muting capture made turn-taking too slow.
+The barge-in replacement was tested in headed Chrome with the same direct
+PipeWire loop:
+
+- A long English turn began playing its Brazilian Portuguese translation.
+- A Brazilian Portuguese turn started before that output finished.
+- The first translation stopped mid-sentence instead of continuing to play.
+- The Portuguese input was transcribed and produced one English translation.
+- Directly looped output produced no additional turn during a 20 second watch.
 - Chrome reported no console errors or page errors.

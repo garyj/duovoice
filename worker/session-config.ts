@@ -30,7 +30,7 @@ export const SESSION_CONFIG = {
         type: "semantic_vad",
         eagerness: "auto",
         create_response: false,
-        interrupt_response: false,
+        interrupt_response: true,
       },
     },
     output: {

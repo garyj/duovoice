@@ -37,13 +37,15 @@ former pair of fixed-target `gpt-realtime-translate` sessions. Both sessions
 heard the same mixed room microphone and could translate each other's speaker
 output, causing missed Portuguese turns and feedback loops.
 
-The remote stream must play through a native `<audio>` element. The microphone
-sender is disabled from `response.created` until translated audio has drained,
-plus an acoustic tail. VAD must not create responses automatically. The browser
-requests responses only for turns that began while capture was open and deletes
-turns detected during playback. This deliberate half-duplex behavior prevents
-model output from becoming a new user turn. Do not restore barge-in without a
-real acoustic test that proves it cannot self-translate.
+The remote stream must play through a native `<audio>` element so Chrome can use
+it as the WebRTC echo-cancellation reference. Keep the microphone live during
+output so either speaker can interrupt. Semantic VAD may interrupt and truncate
+output, but it must not create responses automatically. The browser requests a
+response only after a detected user turn is committed.
+
+Do not replace this with a microphone mute or acoustic delay. Do not remove the
+client-controlled response step without a real acoustic test proving that the
+interpreter cannot respond to its own output.
 
 The standard OpenAI API key belongs only in `.dev.vars` locally or a Cloudflare
 Worker secret in production. Never expose it to client code, browser storage, or
@@ -58,5 +60,5 @@ Before reporting completion:
 3. Exercise Start, English to Portuguese, Portuguese to English, Stop, and
    restart in headed desktop Chrome.
 4. Check source and translation transcript events, native audio playback,
-   microphone gating, browser errors, and microphone cleanup.
+   barge-in truncation, browser errors, and microphone cleanup.
 5. For audio-path changes, use the actual Linux speaker and microphone stack.

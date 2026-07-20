@@ -24,9 +24,9 @@ const interpreterAudio = requiredElement<HTMLAudioElement>("#interpreter-audio")
 const transcripts = new Transcripts();
 const milestones = new Map<SessionMilestone, Milestone>();
 const recentEvents: string[] = [];
-let captureEnabled = true;
 let lifecycleState: LifecycleState = "idle";
 let lifecycleDetail = "";
+let outputPlaying = false;
 
 const stateLabels: Record<LifecycleState, string> = {
   connecting: "Connecting",
@@ -56,10 +56,10 @@ function renderDiagnostics() {
 
 function renderState() {
   document.body.dataset.state = lifecycleState;
-  const interpreting = lifecycleState === "listening" && !captureEnabled;
+  const interpreting = lifecycleState === "listening" && outputPlaying;
   status.textContent = interpreting ? "Interpreting" : stateLabels[lifecycleState];
   statusDetail.textContent = interpreting
-    ? "Microphone paused to prevent echo"
+    ? "Keep speaking to interrupt"
     : lifecycleDetail;
 
   const active =
@@ -71,10 +71,6 @@ function renderState() {
 }
 
 const controller = new InterpreterController(interpreterAudio, {
-  onCaptureState: (enabled) => {
-    captureEnabled = enabled;
-    renderState();
-  },
   onDiagnostic: (eventType) => {
     recentEvents.push(eventType);
     recentEvents.splice(0, Math.max(0, recentEvents.length - 24));
@@ -97,6 +93,10 @@ const controller = new InterpreterController(interpreterAudio, {
       renderDiagnostics();
     }
   },
+  onOutputState: (playing) => {
+    outputPlaying = playing;
+    renderState();
+  },
   onOutputTranscript: (update) => {
     renderTranscripts(transcripts.updateTranslation(update));
   },
@@ -110,7 +110,7 @@ const controller = new InterpreterController(interpreterAudio, {
 startButton.addEventListener("click", () => {
   milestones.clear();
   recentEvents.length = 0;
-  captureEnabled = true;
+  outputPlaying = false;
   microphoneDetails.textContent = "Waiting for microphone";
   renderTranscripts(transcripts.clear());
   renderDiagnostics();

@@ -1,9 +1,12 @@
+import { type TurnAction, TurnCoordinator } from "./turns";
+
 export type SessionMilestone =
   | "peer-connected"
   | "remote-track"
   | "data-channel"
   | "session-created"
   | "input-speech-started"
+  | "barge-in"
   | "response-started"
   | "remote-audio-started"
   | "input-transcript"
@@ -21,12 +24,12 @@ export interface TranscriptUpdate {
 }
 
 export interface InterpreterSessionCallbacks {
-  onCaptureState: (enabled: boolean) => void;
   onDiagnostic: (eventType: string) => void;
   onExpiry: (expiresAt: number) => void;
   onFailure: (error: Error) => void;
   onInputTranscript: (update: TranscriptUpdate) => void;
   onMilestone: (milestone: Milestone) => void;
+  onOutputState: (playing: boolean) => void;
   onOutputTranscript: (update: TranscriptUpdate) => void;
 }
 
@@ -61,7 +64,6 @@ interface RealtimeEvent {
 
 const CONNECTION_TIMEOUT_MS = 20_000;
 const DISCONNECTED_GRACE_MS = 3_000;
-const ECHO_TAIL_MS = 2_000;
 
 function asError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
@@ -89,7 +91,6 @@ export async function openInterpreterSession(
   const connectionAbort = new AbortController();
   const peerConnection = new RTCPeerConnection();
   const dataChannel = peerConnection.createDataChannel("oai-events");
-  let captureTimer: number | undefined;
   let closing = false;
   let dataChannelOpen = false;
   let disconnectedTimer: number | undefined;
@@ -98,9 +99,8 @@ export async function openInterpreterSession(
   const ignoredInputItemIds = new Set<string>();
   let outputPlaying = false;
   let ready = false;
-  let responseActive = false;
   let sessionCreated = false;
-  let shouldRespondToTurn = false;
+  const turns = new TurnCoordinator();
   let resolveReady: (() => void) | undefined;
   let rejectReady: ((error: Error) => void) | undefined;
 
@@ -138,20 +138,6 @@ export async function openInterpreterSession(
     }
   }
 
-  function setCaptureEnabled(enabled: boolean) {
-    if (closing || microphoneTrack.enabled === enabled) {
-      return;
-    }
-    microphoneTrack.enabled = enabled;
-    callbacks.onDiagnostic(enabled ? "capture.resumed" : "capture.paused");
-    callbacks.onCaptureState(enabled);
-  }
-
-  function pauseCapture() {
-    window.clearTimeout(captureTimer);
-    setCaptureEnabled(false);
-  }
-
   function sendClientEvent(eventType: string, fields: Record<string, unknown> = {}) {
     if (dataChannel.readyState !== "open") {
       fail(new Error(`Could not send ${eventType} before the event channel opened`));
@@ -161,15 +147,13 @@ export async function openInterpreterSession(
     callbacks.onDiagnostic(`client.${eventType}`);
   }
 
-  function resumeCaptureWhenIdle() {
-    window.clearTimeout(captureTimer);
-    if (responseActive || outputPlaying) {
-      return;
+  function applyTurnAction(action: TurnAction, itemId?: string) {
+    if (action === "respond") {
+      sendClientEvent("response.create");
+    } else if (action === "delete" && itemId) {
+      ignoredInputItemIds.add(itemId);
+      sendClientEvent("conversation.item.delete", { item_id: itemId });
     }
-    // Keep captured audio quiet while the output device and echo canceller settle.
-    captureTimer = window.setTimeout(() => {
-      setCaptureEnabled(true);
-    }, ECHO_TAIL_MS);
   }
 
   function updateExpiry(candidate: unknown) {
@@ -200,7 +184,10 @@ export async function openInterpreterSession(
         checkReady();
         break;
       case "input_audio_buffer.speech_started":
-        shouldRespondToTurn = microphoneTrack.enabled && !responseActive;
+        if (turns.speechStarted() || outputPlaying) {
+          callbacks.onDiagnostic("barge-in");
+          mark("barge-in");
+        }
         mark("input-speech-started");
         break;
       case "input_audio_buffer.committed":
@@ -208,36 +195,27 @@ export async function openInterpreterSession(
           fail(new Error("The committed audio turn did not include an item ID"));
           break;
         }
-        if (shouldRespondToTurn) {
-          pauseCapture();
-          responseActive = true;
-          sendClientEvent("response.create");
-        } else {
-          ignoredInputItemIds.add(message.item_id);
-          sendClientEvent("conversation.item.delete", {
-            item_id: message.item_id,
-          });
-        }
-        shouldRespondToTurn = false;
+        applyTurnAction(turns.turnCommitted(), message.item_id);
         break;
       case "response.created":
-        responseActive = true;
-        pauseCapture();
+        turns.responseCreated();
         mark("response-started");
         break;
       case "output_audio_buffer.started":
         outputPlaying = true;
-        pauseCapture();
+        callbacks.onOutputState(true);
         mark("remote-audio-started");
         break;
       case "output_audio_buffer.stopped":
       case "output_audio_buffer.cleared":
         outputPlaying = false;
-        resumeCaptureWhenIdle();
+        callbacks.onOutputState(false);
         break;
       case "response.done":
-        responseActive = false;
-        resumeCaptureWhenIdle();
+        if (!outputPlaying) {
+          callbacks.onOutputState(false);
+        }
+        applyTurnAction(turns.responseDone());
         break;
       case "conversation.item.input_audio_transcription.delta":
         if (
@@ -304,7 +282,6 @@ export async function openInterpreterSession(
       rejectReady?.(reason);
     }
     closing = true;
-    window.clearTimeout(captureTimer);
     window.clearTimeout(connectionTimer);
     window.clearTimeout(disconnectedTimer);
     signal.removeEventListener("abort", close);
@@ -394,7 +371,7 @@ export async function openInterpreterSession(
       sdp: await response.text(),
     });
     await readyPromise;
-    callbacks.onCaptureState(true);
+    callbacks.onOutputState(false);
   } catch (error) {
     close();
     throw asError(error);

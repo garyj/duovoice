@@ -15,11 +15,11 @@ export type LifecycleState =
   | "error";
 
 export interface InterpreterControllerCallbacks {
-  onCaptureState: (enabled: boolean) => void;
   onDiagnostic: (eventType: string) => void;
   onInputTranscript: (update: TranscriptUpdate) => void;
   onMicrophone: (settings: MediaTrackSettings) => void;
   onMilestone: (milestone: Milestone) => void;
+  onOutputState: (playing: boolean) => void;
   onOutputTranscript: (update: TranscriptUpdate) => void;
   onState: (state: LifecycleState, detail?: string) => void;
 }
@@ -106,7 +106,6 @@ export class InterpreterController {
     this.sessionAbort = sessionAbort;
 
     const callbacks: InterpreterSessionCallbacks = {
-      onCaptureState: this.callbacks.onCaptureState,
       onDiagnostic: this.callbacks.onDiagnostic,
       onExpiry: (expiry) => {
         if (this.sessionAbort !== sessionAbort) {
@@ -122,6 +121,7 @@ export class InterpreterController {
       },
       onInputTranscript: this.callbacks.onInputTranscript,
       onMilestone: this.callbacks.onMilestone,
+      onOutputState: this.callbacks.onOutputState,
       onOutputTranscript: this.callbacks.onOutputTranscript,
     };
 

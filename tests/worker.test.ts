@@ -89,7 +89,7 @@ describe("credential Worker", () => {
             type: "semantic_vad",
             eagerness: "auto",
             create_response: false,
-            interrupt_response: false,
+            interrupt_response: true,
           },
         },
         output: { voice: "marin" },

@@ -22,9 +22,10 @@ Microphone → one gpt-realtime-2.1 WebRTC session → opposite-language speech
   whether that turn is genuine before requesting a response.
 - `gpt-realtime-whisper` supplies the source transcript.
 - The remote stream plays through one native `<audio>` element.
-- The microphone sender pauses while translated audio is playing. Any turn
-  detected during playback is discarded, then capture resumes after the
-  speaker and echo canceller have settled.
+- The microphone remains live during translated audio. New speech interrupts
+  and truncates the current translation so conversation can continue naturally.
+- Chrome's WebRTC echo cancellation prevents interpreter audio from becoming a
+  new user turn, while the browser retains control of response creation.
 - A small Cloudflare Worker proxies the WebRTC offer to OpenAI so the standard
   API key remains server-side.
 
