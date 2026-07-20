@@ -1,0 +1,54 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "FastAPI",
+    "version": "0.1.0"
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "paths": {
+    "/api/hello": {
+      "get": {
+        "summary": "Hello",
+        "operationId": "getHello",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HelloReply"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HelloReply": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "docs_url": {
+            "type": "string",
+            "title": "Docs Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "docs_url"
+        ],
+        "title": "HelloReply"
+      }
+    }
+  }
+}

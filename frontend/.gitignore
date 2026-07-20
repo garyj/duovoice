@@ -11,8 +11,6 @@ node_modules
 dist
 dist-ssr
 *.local
-.env
-.venv
 
 # Editor directories and files
 .vscode/*
@@ -24,5 +22,3 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-
-apm_modules/

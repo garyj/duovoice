@@ -1,0 +1,13 @@
+{
+  "lspServers": {
+    "svelte": {
+      "command": "svelteserver",
+      "args": [
+        "--stdio"
+      ],
+      "fileExtensions": {
+        ".svelte": "svelte"
+      }
+    }
+  }
+}

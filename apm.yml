@@ -1,0 +1,25 @@
+name: sther
+version: 0.0.0
+description: Sther
+author: Gary Jarrel
+targets:
+- claude
+- codex
+- copilot
+dependencies:
+  apm:
+  - sveltejs/ai-tools/plugins/claude/svelte
+  mcp:
+  - name: daisyui-blueprint
+    registry: false
+    transport: stdio
+    command: npx
+    args:
+    - -y
+    - daisyui-blueprint@latest
+    env:
+      LICENSE: '${DAISYUI_BLUEPRINT_LICENSE}'
+      EMAIL: '${DAISYUI_BLUEPRINT_EMAIL:-gary@jarrel.com.au}'
+      FIGMA: '${FIGMA_TOKEN}'
+includes: auto
+scripts: {}

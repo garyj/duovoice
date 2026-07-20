@@ -1,0 +1,47 @@
+@import "tailwindcss";
+@plugin "daisyui";
+
+/* Element typography lives here, once — never as utility strings in markup. */
+@layer base {
+  h1 { @apply text-3xl font-semibold tracking-tight; }
+  h2 { @apply text-lg font-semibold; }
+  p  { @apply text-sm leading-relaxed; }
+}
+
+/* Sther custom theme: restrained dark, tight radii, mint primary. */
+@plugin "daisyui/theme" {
+  name: "sther";
+  default: true;
+  prefersdark: true;
+  color-scheme: dark;
+
+  --color-base-100: oklch(17% 0.012 260);
+  --color-base-200: oklch(14% 0.012 260);
+  --color-base-300: oklch(11% 0.012 260);
+  --color-base-content: oklch(92% 0.01 260);
+  --color-primary: oklch(78% 0.12 165);
+  --color-primary-content: oklch(16% 0.02 165);
+  --color-secondary: oklch(72% 0.1 220);
+  --color-secondary-content: oklch(15% 0.02 220);
+  --color-accent: oklch(75% 0.12 300);
+  --color-accent-content: oklch(15% 0.02 300);
+  --color-neutral: oklch(26% 0.015 260);
+  --color-neutral-content: oklch(90% 0.01 260);
+  --color-info: oklch(72% 0.12 220);
+  --color-info-content: oklch(15% 0.02 220);
+  --color-success: oklch(75% 0.13 160);
+  --color-success-content: oklch(15% 0.02 160);
+  --color-warning: oklch(80% 0.12 85);
+  --color-warning-content: oklch(20% 0.03 85);
+  --color-error: oklch(68% 0.16 25);
+  --color-error-content: oklch(96% 0.01 25);
+
+  --radius-selector: 0.5rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.5rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}

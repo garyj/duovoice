@@ -1,0 +1,13 @@
+[mcp_servers.svelte]
+url = "https://mcp.svelte.dev/mcp"
+id = ""
+
+[mcp_servers.daisyui-blueprint]
+command = "npx"
+args = ["-y", "daisyui-blueprint@latest"]
+id = ""
+
+[mcp_servers.daisyui-blueprint.env]
+LICENSE = "${DAISYUI_BLUEPRINT_LICENSE}"
+EMAIL = "${DAISYUI_BLUEPRINT_EMAIL:-gary@jarrel.com.au}"
+FIGMA = "${FIGMA_TOKEN}"

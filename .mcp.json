@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "svelte": {
+      "type": "http",
+      "url": "https://mcp.svelte.dev/mcp"
+    },
+    "daisyui-blueprint": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "daisyui-blueprint@latest"
+      ],
+      "env": {
+        "LICENSE": "${DAISYUI_BLUEPRINT_LICENSE}",
+        "EMAIL": "${DAISYUI_BLUEPRINT_EMAIL:-gary@jarrel.com.au}",
+        "FIGMA": "${FIGMA_TOKEN}"
+      }
+    }
+  }
+}
