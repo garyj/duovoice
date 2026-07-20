@@ -3,36 +3,66 @@ import { describe, expect, it } from "vitest";
 import { Transcripts } from "../src/transcripts";
 
 describe("Transcripts", () => {
-  it("keeps source and target text independent", () => {
+  it("keeps heard speech and interpretation independent", () => {
     const transcripts = new Transcripts();
 
-    transcripts.appendSource("Can you hear me?");
-    transcripts.appendTranslation("pt", "Você consegue me ouvir?");
-    const snapshot = transcripts.appendTranslation("en", "Good evening.");
+    transcripts.updateHeard({ id: "input-1", text: "Can you hear me?", final: true });
+    const snapshot = transcripts.updateTranslation({
+      id: "output-1",
+      text: "Você consegue me ouvir?",
+      final: true,
+    });
 
     expect(snapshot).toEqual({
-      source: "Can you hear me?",
-      pt: "Você consegue me ouvir?",
-      en: "Good evening.",
+      heard: "Can you hear me?",
+      translation: "Você consegue me ouvir?",
     });
   });
 
-  it("returns copies and clears all text", () => {
+  it("assembles deltas and replaces them with the final transcript", () => {
     const transcripts = new Transcripts();
-    const first = transcripts.appendSource("hello");
 
-    first.source = "changed outside";
+    transcripts.updateHeard({ id: "input-1", text: "Você ", final: false });
+    transcripts.updateHeard({ id: "input-1", text: "vai", final: false });
+    const snapshot = transcripts.updateHeard({
+      id: "input-1",
+      text: "Você vai dormir?",
+      final: true,
+    });
 
-    expect(transcripts.snapshot().source).toBe("hello");
-    expect(transcripts.clear()).toEqual({ source: "", en: "", pt: "" });
+    expect(snapshot.heard).toBe("Você vai dormir?");
+  });
+
+  it("separates successive spoken turns", () => {
+    const transcripts = new Transcripts();
+
+    transcripts.updateTranslation({ id: "output-1", text: "Hello.", final: true });
+    const snapshot = transcripts.updateTranslation({
+      id: "output-2",
+      text: "Good night.",
+      final: true,
+    });
+
+    expect(snapshot.translation).toBe("Hello.\n\nGood night.");
   });
 
   it("retains only the latest six thousand characters", () => {
     const transcripts = new Transcripts();
 
-    const snapshot = transcripts.appendTranslation("pt", `old${"x".repeat(6_000)}`);
+    const snapshot = transcripts.updateTranslation({
+      id: "output-1",
+      text: `old${"x".repeat(6_000)}`,
+      final: true,
+    });
 
-    expect(snapshot.pt).toHaveLength(6_000);
-    expect(snapshot.pt).toBe("x".repeat(6_000));
+    expect(snapshot.translation).toHaveLength(6_000);
+    expect(snapshot.translation).toBe("x".repeat(6_000));
+  });
+
+  it("clears both transcript columns", () => {
+    const transcripts = new Transcripts();
+    transcripts.updateHeard({ id: "input-1", text: "hello", final: true });
+
+    expect(transcripts.clear()).toEqual({ heard: "", translation: "" });
   });
 });

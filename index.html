@@ -17,8 +17,8 @@
           <p class="eyebrow">Sther</p>
           <h1>Speak naturally.<br />Hear the translation.</h1>
           <p class="caption">
-            One shared microphone, translating English and Brazilian Portuguese
-            in both directions with native WebRTC audio.
+            One careful interpreter for natural English and Brazilian Portuguese
+            conversation, with no cross-talk between competing sessions.
           </p>
         </div>
         <div class="actions">
@@ -39,20 +39,15 @@
 
       <section class="transcripts" aria-label="Live translations">
         <article class="transcript">
-          <p class="language-label">Português falado</p>
-          <h2 class="language-name">English</h2>
-          <p id="english-text" class="live-text" aria-live="polite"></p>
+          <p class="language-label">Latest speaker</p>
+          <h2 class="language-name">What was heard</h2>
+          <p id="heard-text" class="live-text" aria-live="polite"></p>
         </article>
         <article class="transcript">
-          <p class="language-label">Spoken English</p>
-          <h2 class="language-name">Português brasileiro</h2>
-          <p id="portuguese-text" class="live-text" aria-live="polite"></p>
+          <p class="language-label">English ↔ Português</p>
+          <h2 class="language-name">Translation</h2>
+          <p id="translation-text" class="live-text" aria-live="polite"></p>
         </article>
-      </section>
-
-      <section class="source">
-        <h2>English heard on microphone</h2>
-        <p id="source-text" aria-live="polite"></p>
       </section>
 
       <details class="technical">
@@ -65,13 +60,11 @@
 
       <footer class="footer">
         <span>English ↔ Brazilian Portuguese</span>
-        <span>Powered by OpenAI realtime translation</span>
+        <span>One realtime interpreter session</span>
       </footer>
 
-      <!-- biome-ignore lint/a11y/useMediaCaption: The live English panel captions this WebRTC stream. -->
-      <audio id="english-audio" autoplay aria-hidden="true"></audio>
-      <!-- biome-ignore lint/a11y/useMediaCaption: The live Portuguese panel captions this WebRTC stream. -->
-      <audio id="portuguese-audio" autoplay aria-hidden="true"></audio>
+      <!-- biome-ignore lint/a11y/useMediaCaption: The translation panel captions this WebRTC stream. -->
+      <audio id="interpreter-audio" autoplay playsinline aria-hidden="true"></audio>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>

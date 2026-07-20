@@ -1,138 +1,153 @@
-# Realtime translation architecture
+# Realtime interpretation architecture
 
 ## Decision
 
-Sther is a browser-native WebRTC application with one microphone stream and two
-concurrent `gpt-realtime-translate` sessions:
+Sther uses one browser-native WebRTC conversation session with
+`gpt-realtime-2.1`. The session receives a mixed room microphone and uses an
+interpreter prompt to translate each English turn into Brazilian Portuguese and
+each Brazilian Portuguese turn into English.
 
-| Session | Input | Output | Transcription |
-| --- | --- | --- | --- |
-| English to Portuguese | Shared microphone track | Brazilian Portuguese audio and text | `gpt-realtime-whisper` |
-| Portuguese to English | Shared microphone track | English audio and text | Disabled |
+The session configuration follows the working OpenAI Playground shape:
 
-Each peer connection attaches its remote stream directly to its own autoplaying
-`<audio>` element. Output audio never passes through Web Audio. This keeps
-Chromium's native WebRTC playback path available to its acoustic echo
-cancellation reference.
+- one `type: realtime` session
+- explicit interpreter instructions
+- `gpt-realtime-whisper` input transcription
+- near-field noise reduction
+- semantic VAD with automatic eagerness
+- `marin` output voice
+- audio-only output
+- low reasoning effort
+- no tools
 
-The browser state machine owns microphone capture, both peer connections, both
-event data channels, transcript aggregation, expiry timers, reconnect attempts,
-and cleanup. A run identifier makes late events from a stopped or replaced run
-inert.
+The browser attaches the microphone to one peer connection and attaches the
+single remote stream directly to one native `<audio>` element.
 
-## Authentication
+## Why the dual-session design failed
 
-The production site is a Cloudflare Worker with Vite's static output bound as
-assets. `POST /api/session` accepts a target language and whether the session
-should transcribe input. The Worker reads `OPENAI_API_KEY` from a Worker secret
-and returns a short-lived OpenAI client secret. Local `wrangler dev` reads the
-same binding from an ignored `.dev.vars`. The development worktree links that
-file to its existing ignored `.env.local`.
+The earlier rewrite used two concurrent `gpt-realtime-translate` sessions. One
+always targeted Portuguese and one always targeted English. Both received the
+same room microphone.
 
-The standard API key is never sent to, stored by, or bundled into the browser.
-The Worker route is same-origin and the response is not cacheable.
+That architecture was unsuitable for a couple speaking through one physical
+microphone:
 
-Cloudflare recommends Workers Static Assets for new full-stack applications.
-The static asset configuration can run the Worker first only for `/api/*`
-routes. Local secrets can live in `.env` or `.dev.vars`, with only one of those
-files used at a time.
+1. The microphone is already a mix of both people and anything returning from
+   the speakers. There is no source-speaker routing.
+2. Portuguese output from one peer connection can leak into the microphone and
+   become input to the English-target connection. The English result can then
+   leak back into the Portuguese-target connection.
+3. Two independent models have no shared turn history and cannot know that the
+   other connection produced the audio they just heard.
+4. The fixed-target translation model does not accept the custom interpreter
+   prompt or selected voice that made the Playground behavior successful.
 
-## Protocol
+OpenAI's translation guide recommends preserving separate speaker tracks for
+multi-party translation and says mixed speakers are harder to handle. A room
+microphone cannot satisfy that recommendation. The dedicated translation model
+is a strong fit for one-way listening, broadcasts, or routed call participants,
+not this mixed two-way room conversation.
 
-For each target language:
+## Echo control
 
-1. Request a short-lived client secret from `/api/session`.
-2. Create an `RTCPeerConnection` and an `oai-events` data channel.
-3. Attach the existing microphone track.
-4. Create and install the local SDP offer.
-5. POST the offer to
-   `https://api.openai.com/v1/realtime/translations/calls` with the client
-   secret.
-6. Install the returned SDP answer.
-7. Attach the remote track to the session's `<audio>` element.
-8. Append input, output, and timing transcript deltas from the data channel.
+Chrome captures the microphone with echo cancellation, noise suppression, and
+automatic gain control. The remote audio remains on the native WebRTC playback
+path so Chromium can use its normal acoustic echo cancellation reference.
 
-Translation sessions do not use conversational response events. The documented
-server event set is `session.created`, `session.updated`, `session.closed`,
-input transcript delta, output transcript delta, output audio delta, and
-`error`. There is no response completion or output cancellation event.
+Browser echo cancellation is still imperfect with physical speakers. Sther
+therefore adds a deterministic half-duplex gate:
 
-Stop closes both data channels and peer connections, stops the shared
-microphone, clears timers and pending requests, and detaches both audio
-elements. Reconnection is sequential and happens before the earliest advertised
-session expiry, so two generations never translate the microphone at the same
-time.
+1. Keep semantic VAD enabled, but disable its automatic response creation.
+2. Request a response only for a turn that began while microphone capture was
+   open and no response was active.
+3. Disable the outgoing microphone track before requesting that response.
+4. Delete any turn detected while capture is closed instead of responding to
+   it.
+5. Keep capture closed while the remote output buffer is playing and for two
+   seconds afterward, giving the speaker and echo canceller time to settle.
+6. If a response has no audio, apply the same tail after `response.done`.
 
-## Supported behavior and limits
+This prevents the interpreter from translating itself even when speaker output
+reaches the microphone. The tradeoff is intentional: a person cannot interrupt
+while the translation is speaking. Reliability is more important than barge-in
+for this application.
 
-- A translation session has one target language. Two target languages require
-  two sessions.
-- The model supports Portuguese as target code `pt`. Prior live listening
-  confirmed Brazilian Portuguese output.
-- Same-language speech is expected to produce no translated output. Prior live
-  probes confirmed this for Portuguese input into a Portuguese-target session.
-- Input transcription is optional. Enabling it on one of the identical input
-  sessions avoids duplicate transcript work and cost.
-- The current Tier 1 model limit is 50 minutes of audio per minute. Higher tiers
-  list 200, 400, 650, and 850.
-- Current output pricing is USD 0.034 per translation audio minute and USD 0.017
-  per transcription audio minute. Two translation sessions plus one
-  transcription session therefore cost about USD 0.085 per wall-clock minute,
-  or USD 5.10 per hour, while all three are continuously receiving audio.
-- Translation event fixtures captured in July 2026 advertise session expiry
-  roughly one hour after creation.
+## Authentication and protocol
 
-## Evidence
+The app uses OpenAI's unified WebRTC interface:
 
-Official documentation:
+1. Chrome captures one microphone track.
+2. The browser creates one `RTCPeerConnection`, one remote `<audio>` element,
+   and one `oai-events` data channel.
+3. The browser creates an SDP offer and sends it to `POST /api/session` as
+   `application/sdp`.
+4. The Cloudflare Worker combines the offer with the server-owned session
+   configuration in multipart form data.
+5. The Worker posts that form to `POST /v1/realtime/calls` using the standard
+   API key.
+6. The Worker returns OpenAI's SDP answer to the browser.
+7. The browser installs the answer and then relies on the WebRTC media path for
+   microphone input and translated audio output.
 
-- [Realtime translation guide](https://developers.openai.com/api/docs/guides/realtime-translation)
-- [Realtime translation cookbook](https://developers.openai.com/cookbook/examples/voice_solutions/realtime_translation_guide)
-- [Translation server events](https://developers.openai.com/api/reference/resources/realtime/translation-server-events)
-- [Translation client events](https://developers.openai.com/api/reference/resources/realtime/translation-client-events)
-- [`gpt-realtime-translate` model limits](https://developers.openai.com/api/docs/models/gpt-realtime-translate)
-- [OpenAI API pricing](https://developers.openai.com/api/docs/pricing#audio-tokens)
-- [Cloudflare Workers Static Assets](https://developers.cloudflare.com/workers/static-assets/)
-- [Cloudflare local secrets](https://developers.cloudflare.com/workers/local-development/environment-variables/)
+The standard API key never enters the browser. The Worker route and its response
+are not cacheable.
 
-Live evidence:
+## Transcript events
 
-- The parked WebSocket probes measured median translated speech onset at about
-  2.35 seconds in both directions, confirmed simultaneous output before long
-  utterances ended, and confirmed same-language suppression.
-- On 2026-07-20, headed Chrome posted an SDP offer directly to the translation
-  calls endpoint with a standard API key. The CORS preflight returned 200 and
-  negotiation returned 201 when the model query parameter was present. Direct
-  use is technically possible, but it is rejected as an application
-  architecture because OpenAI requires standard keys to remain server-side and
-  recommends short-lived browser client secrets.
-- The same Chrome probe reported a real 48 kHz mono microphone track with echo
-  cancellation, noise suppression, and automatic gain control enabled.
-- On 2026-07-20, the one-direction short-lived-secret spike connected in headed
-  Chrome in about three seconds. The data channel opened about 0.24 seconds
-  later and `session.created` arrived about 0.23 seconds after that.
-- The spike played the existing English fixture through the real Sennheiser
-  speaker. The C922 webcam microphone captured it, and the native remote WebRTC
-  track produced Brazilian Portuguese audio and transcript output. Source and
-  translation transcript deltas began 82 milliseconds apart.
-- The microphone later transcribed some Portuguese remote speaker output, which
-  proves the physical acoustic return path was active. The Portuguese-target
-  session suppressed that same-language input, so it did not create a runaway
-  translation loop.
-- The live WebRTC data channel also emitted `output_audio_buffer.started`, which
-  is not listed in the current translation server event reference. The client
-  treats unknown events as diagnostics and does not depend on this event.
-- Stop closed the data channel, peer connection, microphone track, and remote
-  audio attachment.
-- On 2026-07-20, the final bidirectional app connected both sessions in headed
-  Chrome in about 3.3 seconds. The English fixture produced only Brazilian
-  Portuguese translation, and the Portuguese fixture produced only English
-  translation.
-- The final acoustic isolation run played only the English fixture, then
-  observed the physical speaker and microphone path for one minute. Chromium's
-  native WebRTC echo cancellation removed almost all speaker return. The
-  opposite session emitted one bounded two-word English fragment after about 30
-  seconds, then remained silent for the rest of the observation window. There
-  was no repeated audio, retransmission into Portuguese, or growing feedback.
-- Final Stop testing left both remote audio elements paused with `srcObject`
-  cleared. A following Start created a fresh pair successfully.
+Source speech uses:
+
+- `conversation.item.input_audio_transcription.delta`
+- `conversation.item.input_audio_transcription.completed`
+
+Translated speech uses:
+
+- `response.output_audio_transcript.delta`
+- `response.output_audio_transcript.done`
+
+Each final transcript replaces its accumulated deltas for the same item. New
+item identifiers begin a new paragraph in the rolling display.
+
+## Reference implementations
+
+The browser capture pattern was compared against current official sources:
+
+- [OpenAI Realtime WebRTC guide](https://developers.openai.com/api/docs/guides/realtime-webrtc)
+- [OpenAI Realtime Console](https://github.com/openai/openai-realtime-console)
+- [OpenAI Realtime Voice Component](https://github.com/openai/realtime-voice-component)
+- [OpenAI Realtime translation cookbook](https://github.com/openai/openai-cookbook/tree/main/examples/voice_solutions/realtime_translation_guide)
+- [OpenAI semantic VAD guide](https://developers.openai.com/api/docs/guides/realtime-vad#semantic-vad)
+- [OpenAI Realtime conversations guide](https://developers.openai.com/api/docs/guides/realtime-conversations#keep-vad-but-disable-automatic-responses)
+- [OpenAI Realtime server events](https://developers.openai.com/api/reference/resources/realtime/server-events)
+
+The official Realtime Console and Realtime Voice Component both use ordinary
+`getUserMedia({ audio: true })`, one microphone track, one peer connection, and
+one native autoplaying audio element. Sther's browser capture is the same shape,
+with explicit standard Chrome audio-processing constraints. No custom PCM
+resampler or AudioWorklet is required for WebRTC.
+
+## Verification record
+
+The first dual-session acoustic experiment translated both prepared fixtures,
+but it also captured speaker return and produced an opposite-session fragment.
+Real conversation use subsequently showed missed Portuguese speech and repeated
+English and Portuguese output. That real failure supersedes the earlier limited
+fixture result.
+
+The first single-session acoustic run translated English correctly, but VAD
+automatically created another response after output reached the physical room
+microphone. That proved one session and browser echo cancellation were not
+sufficient by themselves. Automatic response creation was then disabled and
+the browser became responsible for accepting or rejecting detected turns.
+
+The final headed Chrome run used a PipeWire null sink as both the browser's
+speaker and microphone source. This deliberately fed every output sample back
+toward Chrome without making sound in the room. The run verified:
+
+- English input produced one Brazilian Portuguese output turn.
+- Brazilian Portuguese input produced one English output turn.
+- Capture was disabled before each requested response and stayed disabled
+  through remote playback.
+- Directly looped output produced no additional turn during a 20 second watch
+  after each translation.
+- Stop released the microphone and cleared the remote audio stream.
+- Start established a fresh session after Stop.
+- Chrome reported no console errors or page errors.

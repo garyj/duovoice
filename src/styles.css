@@ -192,30 +192,6 @@ body[data-state="error"] .status-dot {
   white-space: pre-wrap;
 }
 
-.source {
-  display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
-  gap: 24px;
-  align-items: start;
-  padding: 22px 0;
-  border-bottom: 1px solid #d8d2c5;
-}
-
-.source h2 {
-  margin: 3px 0 0;
-  font-size: 0.82rem;
-  letter-spacing: 0.05em;
-}
-
-.source p {
-  max-height: 90px;
-  margin: 0;
-  overflow-y: auto;
-  color: #596158;
-  line-height: 1.5;
-  white-space: pre-wrap;
-}
-
 .technical {
   margin-top: 18px;
   color: #687068;
@@ -293,7 +269,6 @@ audio {
     border-left: 0;
   }
 
-  .source,
   .technical-grid {
     grid-template-columns: 1fr;
   }

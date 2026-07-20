@@ -1,5 +1,5 @@
-import { type LifecycleState, TranslationController } from "./controller";
-import type { Milestone, SessionMilestone, TargetLanguage } from "./realtime";
+import { InterpreterController, type LifecycleState } from "./controller";
+import type { Milestone, SessionMilestone } from "./realtime";
 import { type TranscriptSnapshot, Transcripts } from "./transcripts";
 import "./styles.css";
 
@@ -15,17 +15,18 @@ const startButton = requiredElement<HTMLButtonElement>("#start");
 const stopButton = requiredElement<HTMLButtonElement>("#stop");
 const status = requiredElement<HTMLOutputElement>("#status");
 const statusDetail = requiredElement<HTMLElement>("#status-detail");
-const sourceText = requiredElement<HTMLElement>("#source-text");
-const englishText = requiredElement<HTMLElement>("#english-text");
-const portugueseText = requiredElement<HTMLElement>("#portuguese-text");
+const heardText = requiredElement<HTMLElement>("#heard-text");
+const translationText = requiredElement<HTMLElement>("#translation-text");
 const diagnostics = requiredElement<HTMLElement>("#diagnostics");
 const microphoneDetails = requiredElement<HTMLElement>("#microphone-details");
-const englishAudio = requiredElement<HTMLAudioElement>("#english-audio");
-const portugueseAudio = requiredElement<HTMLAudioElement>("#portuguese-audio");
+const interpreterAudio = requiredElement<HTMLAudioElement>("#interpreter-audio");
 
 const transcripts = new Transcripts();
-const milestones = new Map<string, Milestone>();
+const milestones = new Map<SessionMilestone, Milestone>();
 const recentEvents: string[] = [];
+let captureEnabled = true;
+let lifecycleState: LifecycleState = "idle";
+let lifecycleDetail = "";
 
 const stateLabels: Record<LifecycleState, string> = {
   connecting: "Connecting",
@@ -37,13 +38,11 @@ const stateLabels: Record<LifecycleState, string> = {
 };
 
 function renderTranscripts(snapshot: TranscriptSnapshot) {
-  sourceText.textContent = snapshot.source || "English speech will appear here.";
-  englishText.textContent =
-    snapshot.en || "Portuguese speech will appear here in English.";
-  portugueseText.textContent =
-    snapshot.pt || "English speech will appear here in Brazilian Portuguese.";
+  heardText.textContent = snapshot.heard || "Speech will appear here.";
+  translationText.textContent =
+    snapshot.translation || "The interpretation will appear here.";
 
-  for (const element of [sourceText, englishText, portugueseText]) {
+  for (const element of [heardText, translationText]) {
     element.scrollTop = element.scrollHeight;
   }
 }
@@ -51,67 +50,67 @@ function renderTranscripts(snapshot: TranscriptSnapshot) {
 function renderDiagnostics() {
   const milestoneLines = [...milestones.values()]
     .sort((left, right) => left.elapsedMs - right.elapsedMs)
-    .map(
-      ({ elapsedMs, name, target }) =>
-        `${target.toUpperCase()} ${name}: ${elapsedMs} ms`,
-    );
+    .map(({ elapsedMs, name }) => `${name}: ${elapsedMs} ms`);
   diagnostics.textContent = [...milestoneLines, ...recentEvents].join("\n");
 }
 
-function milestoneKey(target: TargetLanguage, name: SessionMilestone): string {
-  return `${target}:${name}`;
-}
-
-function handleState(state: LifecycleState, detail?: string) {
-  document.body.dataset.state = state;
-  status.textContent = stateLabels[state];
-  statusDetail.textContent = detail ?? "";
+function renderState() {
+  document.body.dataset.state = lifecycleState;
+  const interpreting = lifecycleState === "listening" && !captureEnabled;
+  status.textContent = interpreting ? "Interpreting" : stateLabels[lifecycleState];
+  statusDetail.textContent = interpreting
+    ? "Microphone paused to prevent echo"
+    : lifecycleDetail;
 
   const active =
-    state === "connecting" || state === "listening" || state === "reconnecting";
-  startButton.disabled = active || state === "stopping";
+    lifecycleState === "connecting" ||
+    lifecycleState === "listening" ||
+    lifecycleState === "reconnecting";
+  startButton.disabled = active || lifecycleState === "stopping";
   stopButton.disabled = !active;
 }
 
-const controller = new TranslationController(
-  {
-    en: englishAudio,
-    pt: portugueseAudio,
+const controller = new InterpreterController(interpreterAudio, {
+  onCaptureState: (enabled) => {
+    captureEnabled = enabled;
+    renderState();
   },
-  {
-    onDiagnostic: (target, eventType) => {
-      recentEvents.push(`${target.toUpperCase()} ${eventType}`);
-      recentEvents.splice(0, Math.max(0, recentEvents.length - 20));
+  onDiagnostic: (eventType) => {
+    recentEvents.push(eventType);
+    recentEvents.splice(0, Math.max(0, recentEvents.length - 24));
+    renderDiagnostics();
+  },
+  onInputTranscript: (update) => {
+    renderTranscripts(transcripts.updateHeard(update));
+  },
+  onMicrophone: (settings) => {
+    microphoneDetails.textContent = [
+      `${settings.sampleRate ?? "unknown"} Hz`,
+      `${settings.channelCount ?? "unknown"} channel`,
+      `echo cancellation ${settings.echoCancellation ? "on" : "off"}`,
+      `noise suppression ${settings.noiseSuppression ? "on" : "off"}`,
+    ].join(", ");
+  },
+  onMilestone: (milestone) => {
+    if (!milestones.has(milestone.name)) {
+      milestones.set(milestone.name, milestone);
       renderDiagnostics();
-    },
-    onMicrophone: (settings) => {
-      microphoneDetails.textContent = [
-        `${settings.sampleRate ?? "unknown"} Hz`,
-        `${settings.channelCount ?? "unknown"} channel`,
-        `echo cancellation ${settings.echoCancellation ? "on" : "off"}`,
-        `noise suppression ${settings.noiseSuppression ? "on" : "off"}`,
-      ].join(", ");
-    },
-    onMilestone: (milestone) => {
-      const key = milestoneKey(milestone.target, milestone.name);
-      if (!milestones.has(key)) {
-        milestones.set(key, milestone);
-        renderDiagnostics();
-      }
-    },
-    onSourceTranscript: (delta) => {
-      renderTranscripts(transcripts.appendSource(delta));
-    },
-    onState: handleState,
-    onTranslationTranscript: (target, delta) => {
-      renderTranscripts(transcripts.appendTranslation(target, delta));
-    },
+    }
   },
-);
+  onOutputTranscript: (update) => {
+    renderTranscripts(transcripts.updateTranslation(update));
+  },
+  onState: (state, detail) => {
+    lifecycleState = state;
+    lifecycleDetail = detail ?? "";
+    renderState();
+  },
+});
 
 startButton.addEventListener("click", () => {
   milestones.clear();
   recentEvents.length = 0;
+  captureEnabled = true;
   microphoneDetails.textContent = "Waiting for microphone";
   renderTranscripts(transcripts.clear());
   renderDiagnostics();
@@ -122,4 +121,4 @@ stopButton.addEventListener("click", () => controller.stop());
 window.addEventListener("pagehide", () => controller.stop());
 
 renderTranscripts(transcripts.snapshot());
-handleState("idle");
+renderState();

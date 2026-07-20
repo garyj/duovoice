@@ -1,123 +1,106 @@
-export type TargetLanguage = "en" | "pt";
-
 export type SessionMilestone =
-  | "client-secret"
   | "peer-connected"
   | "remote-track"
   | "data-channel"
   | "session-created"
+  | "input-speech-started"
+  | "response-started"
   | "remote-audio-started"
-  | "source-transcript"
-  | "translation-transcript";
+  | "input-transcript"
+  | "output-transcript";
 
 export interface Milestone {
   elapsedMs: number;
   name: SessionMilestone;
-  target: TargetLanguage;
 }
 
-export interface TranslationSessionCallbacks {
-  onDiagnostic: (target: TargetLanguage, eventType: string) => void;
-  onExpiry: (target: TargetLanguage, expiresAt: number) => void;
-  onFailure: (target: TargetLanguage, error: Error) => void;
+export interface TranscriptUpdate {
+  final: boolean;
+  id: string;
+  text: string;
+}
+
+export interface InterpreterSessionCallbacks {
+  onCaptureState: (enabled: boolean) => void;
+  onDiagnostic: (eventType: string) => void;
+  onExpiry: (expiresAt: number) => void;
+  onFailure: (error: Error) => void;
+  onInputTranscript: (update: TranscriptUpdate) => void;
   onMilestone: (milestone: Milestone) => void;
-  onSourceTranscript: (delta: string) => void;
-  onTranslationTranscript: (target: TargetLanguage, delta: string) => void;
+  onOutputTranscript: (update: TranscriptUpdate) => void;
 }
 
-export interface OpenTranslationSessionOptions {
+export interface OpenInterpreterSessionOptions {
   audioElement: HTMLAudioElement;
-  callbacks: TranslationSessionCallbacks;
+  callbacks: InterpreterSessionCallbacks;
   microphone: MediaStream;
   signal: AbortSignal;
-  target: TargetLanguage;
-  transcribe: boolean;
 }
 
-export interface TranslationSession {
+export interface InterpreterSession {
   close: () => void;
   expiresAt: number | undefined;
-  target: TargetLanguage;
 }
 
-interface ClientSecretResponse {
-  expires_at: number;
-  session?: {
-    expires_at?: number;
-  };
-  value: string;
-}
-
-interface TranslationEvent {
+interface RealtimeEvent {
   delta?: string;
   error?: {
     message?: string;
   };
+  item_id?: string;
+  response?: {
+    id?: string;
+  };
+  response_id?: string;
   session?: {
     expires_at?: number;
   };
+  transcript?: string;
   type?: string;
 }
 
 const CONNECTION_TIMEOUT_MS = 20_000;
 const DISCONNECTED_GRACE_MS = 3_000;
+const ECHO_TAIL_MS = 2_000;
 
 function asError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
 }
 
-function isClientSecret(value: unknown): value is ClientSecretResponse {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const candidate = value as Partial<ClientSecretResponse>;
-  return (
-    typeof candidate.value === "string" && typeof candidate.expires_at === "number"
-  );
+function transcriptId(event: RealtimeEvent, fallback: string): string {
+  return event.item_id ?? event.response_id ?? event.response?.id ?? fallback;
 }
 
-async function requestClientSecret(
-  target: TargetLanguage,
-  transcribe: boolean,
-  signal: AbortSignal,
-): Promise<ClientSecretResponse> {
-  const response = await fetch("/api/session", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ target, transcribe }),
-    signal,
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(
-      `Could not create the ${target} session (${response.status}): ${body}`,
-    );
+function requireAudioTrack(stream: MediaStream): MediaStreamTrack {
+  const [track] = stream.getAudioTracks();
+  if (!track) {
+    throw new Error("The microphone stream has no audio track");
   }
-
-  const payload: unknown = await response.json();
-  if (!isClientSecret(payload)) {
-    throw new Error(`The ${target} session returned an invalid client secret`);
-  }
-  return payload;
+  return track;
 }
 
-export async function openTranslationSession(
-  options: OpenTranslationSessionOptions,
-): Promise<TranslationSession> {
-  const { audioElement, callbacks, microphone, signal, target, transcribe } = options;
+export async function openInterpreterSession(
+  options: OpenInterpreterSessionOptions,
+): Promise<InterpreterSession> {
+  const { audioElement, callbacks, microphone, signal } = options;
+  const microphoneTrack = requireAudioTrack(microphone);
+
   const startedAt = performance.now();
   const connectionAbort = new AbortController();
   const peerConnection = new RTCPeerConnection();
   const dataChannel = peerConnection.createDataChannel("oai-events");
+  let captureTimer: number | undefined;
   let closing = false;
-  let connected = false;
-  let sessionCreated = false;
-  let ready = false;
-  let expiresAt: number | undefined;
+  let dataChannelOpen = false;
   let disconnectedTimer: number | undefined;
   let connectionTimer: number | undefined;
+  let expiresAt: number | undefined;
+  const ignoredInputItemIds = new Set<string>();
+  let outputPlaying = false;
+  let ready = false;
+  let responseActive = false;
+  let sessionCreated = false;
+  let shouldRespondToTurn = false;
   let resolveReady: (() => void) | undefined;
   let rejectReady: ((error: Error) => void) | undefined;
 
@@ -131,7 +114,6 @@ export async function openTranslationSession(
     callbacks.onMilestone({
       elapsedMs: Math.round(performance.now() - startedAt),
       name,
-      target,
     });
   }
 
@@ -142,18 +124,52 @@ export async function openTranslationSession(
 
     const error = asError(value);
     if (ready) {
-      callbacks.onFailure(target, error);
+      callbacks.onFailure(error);
     } else {
       rejectReady?.(error);
     }
   }
 
   function checkReady() {
-    if (!ready && connected && sessionCreated) {
+    if (!ready && dataChannelOpen && sessionCreated) {
       ready = true;
       window.clearTimeout(connectionTimer);
       resolveReady?.();
     }
+  }
+
+  function setCaptureEnabled(enabled: boolean) {
+    if (closing || microphoneTrack.enabled === enabled) {
+      return;
+    }
+    microphoneTrack.enabled = enabled;
+    callbacks.onDiagnostic(enabled ? "capture.resumed" : "capture.paused");
+    callbacks.onCaptureState(enabled);
+  }
+
+  function pauseCapture() {
+    window.clearTimeout(captureTimer);
+    setCaptureEnabled(false);
+  }
+
+  function sendClientEvent(eventType: string, fields: Record<string, unknown> = {}) {
+    if (dataChannel.readyState !== "open") {
+      fail(new Error(`Could not send ${eventType} before the event channel opened`));
+      return;
+    }
+    dataChannel.send(JSON.stringify({ type: eventType, ...fields }));
+    callbacks.onDiagnostic(`client.${eventType}`);
+  }
+
+  function resumeCaptureWhenIdle() {
+    window.clearTimeout(captureTimer);
+    if (responseActive || outputPlaying) {
+      return;
+    }
+    // Keep captured audio quiet while the output device and echo canceller settle.
+    captureTimer = window.setTimeout(() => {
+      setCaptureEnabled(true);
+    }, ECHO_TAIL_MS);
   }
 
   function updateExpiry(candidate: unknown) {
@@ -161,20 +177,20 @@ export async function openTranslationSession(
       return;
     }
     expiresAt = candidate;
-    callbacks.onExpiry(target, candidate);
+    callbacks.onExpiry(candidate);
   }
 
   function handleMessage(event: MessageEvent<string>) {
-    let message: TranslationEvent;
+    let message: RealtimeEvent;
     try {
-      message = JSON.parse(event.data) as TranslationEvent;
+      message = JSON.parse(event.data) as RealtimeEvent;
     } catch {
-      callbacks.onDiagnostic(target, "invalid-json");
+      callbacks.onDiagnostic("invalid-json");
       return;
     }
 
     const eventType = message.type ?? "unknown";
-    callbacks.onDiagnostic(target, eventType);
+    callbacks.onDiagnostic(eventType);
 
     switch (eventType) {
       case "session.created":
@@ -183,29 +199,94 @@ export async function openTranslationSession(
         updateExpiry(message.session?.expires_at);
         checkReady();
         break;
-      case "session.input_transcript.delta":
-        if (typeof message.delta === "string") {
-          mark("source-transcript");
-          callbacks.onSourceTranscript(message.delta);
-        }
+      case "input_audio_buffer.speech_started":
+        shouldRespondToTurn = microphoneTrack.enabled && !responseActive;
+        mark("input-speech-started");
         break;
-      case "session.output_transcript.delta":
-        if (typeof message.delta === "string") {
-          mark("translation-transcript");
-          callbacks.onTranslationTranscript(target, message.delta);
+      case "input_audio_buffer.committed":
+        if (!message.item_id) {
+          fail(new Error("The committed audio turn did not include an item ID"));
+          break;
         }
+        if (shouldRespondToTurn) {
+          pauseCapture();
+          responseActive = true;
+          sendClientEvent("response.create");
+        } else {
+          ignoredInputItemIds.add(message.item_id);
+          sendClientEvent("conversation.item.delete", {
+            item_id: message.item_id,
+          });
+        }
+        shouldRespondToTurn = false;
+        break;
+      case "response.created":
+        responseActive = true;
+        pauseCapture();
+        mark("response-started");
         break;
       case "output_audio_buffer.started":
+        outputPlaying = true;
+        pauseCapture();
         mark("remote-audio-started");
         break;
-      case "session.closed":
-        fail(new Error(`The ${target} translation session closed`));
+      case "output_audio_buffer.stopped":
+      case "output_audio_buffer.cleared":
+        outputPlaying = false;
+        resumeCaptureWhenIdle();
+        break;
+      case "response.done":
+        responseActive = false;
+        resumeCaptureWhenIdle();
+        break;
+      case "conversation.item.input_audio_transcription.delta":
+        if (
+          typeof message.delta === "string" &&
+          !ignoredInputItemIds.has(transcriptId(message, "input"))
+        ) {
+          mark("input-transcript");
+          callbacks.onInputTranscript({
+            final: false,
+            id: transcriptId(message, "input"),
+            text: message.delta,
+          });
+        }
+        break;
+      case "conversation.item.input_audio_transcription.completed":
+        if (
+          typeof message.transcript === "string" &&
+          !ignoredInputItemIds.has(transcriptId(message, "input"))
+        ) {
+          callbacks.onInputTranscript({
+            final: true,
+            id: transcriptId(message, "input"),
+            text: message.transcript,
+          });
+        }
+        break;
+      case "response.output_audio_transcript.delta":
+        if (typeof message.delta === "string") {
+          mark("output-transcript");
+          callbacks.onOutputTranscript({
+            final: false,
+            id: transcriptId(message, "output"),
+            text: message.delta,
+          });
+        }
+        break;
+      case "response.output_audio_transcript.done":
+        if (typeof message.transcript === "string") {
+          callbacks.onOutputTranscript({
+            final: true,
+            id: transcriptId(message, "output"),
+            text: message.transcript,
+          });
+        }
         break;
       case "error":
         fail(
           new Error(
-            message.error?.message ??
-              `The ${target} translation session returned an error`,
+            message.error?.message ?? "The interpreter session returned an error",
           ),
         );
         break;
@@ -219,17 +300,15 @@ export async function openTranslationSession(
     if (!ready) {
       const reason = signal.aborted
         ? asError(signal.reason ?? "The connection was cancelled")
-        : new Error(`The ${target} translation session was closed`);
+        : new Error("The interpreter session was closed");
       rejectReady?.(reason);
     }
     closing = true;
+    window.clearTimeout(captureTimer);
     window.clearTimeout(connectionTimer);
     window.clearTimeout(disconnectedTimer);
     signal.removeEventListener("abort", close);
     connectionAbort.abort();
-    if (dataChannel.readyState === "open") {
-      dataChannel.send(JSON.stringify({ type: "session.close" }));
-    }
     dataChannel.close();
     peerConnection.close();
     audioElement.pause();
@@ -241,32 +320,31 @@ export async function openTranslationSession(
     close();
     throw asError(signal.reason ?? "The connection was cancelled");
   }
+
   connectionTimer = window.setTimeout(() => {
-    const error = new Error(`The ${target} translation session timed out`);
+    const error = new Error("The interpreter session timed out");
     connectionAbort.abort(error);
     fail(error);
   }, CONNECTION_TIMEOUT_MS);
 
   peerConnection.addEventListener("connectionstatechange", () => {
     const state = peerConnection.connectionState;
-    callbacks.onDiagnostic(target, `peer.${state}`);
+    callbacks.onDiagnostic(`peer.${state}`);
     if (state === "connected") {
       window.clearTimeout(disconnectedTimer);
-      connected = true;
       mark("peer-connected");
-      checkReady();
       return;
     }
     if (state === "disconnected") {
       disconnectedTimer = window.setTimeout(() => {
         if (peerConnection.connectionState === "disconnected") {
-          fail(new Error(`The ${target} peer connection was interrupted`));
+          fail(new Error("The interpreter peer connection was interrupted"));
         }
       }, DISCONNECTED_GRACE_MS);
       return;
     }
     if (state === "failed") {
-      fail(new Error(`The ${target} peer connection failed`));
+      fail(new Error("The interpreter peer connection failed"));
     }
   });
 
@@ -275,53 +353,40 @@ export async function openTranslationSession(
     audioElement.srcObject = remoteStream;
     mark("remote-track");
     void audioElement.play().catch((error: unknown) => {
-      fail(new Error(`Could not play ${target} audio: ${asError(error).message}`));
+      fail(new Error(`Could not play interpreter audio: ${asError(error).message}`));
     });
   });
 
-  dataChannel.addEventListener("open", () => mark("data-channel"));
+  dataChannel.addEventListener("open", () => {
+    dataChannelOpen = true;
+    mark("data-channel");
+    checkReady();
+  });
   dataChannel.addEventListener("message", handleMessage);
   dataChannel.addEventListener("close", () => {
     if (!closing) {
-      fail(new Error(`The ${target} event channel closed`));
+      fail(new Error("The interpreter event channel closed"));
     }
   });
 
   try {
-    const secret = await requestClientSecret(
-      target,
-      transcribe,
-      connectionAbort.signal,
-    );
-    mark("client-secret");
-    updateExpiry(secret.session?.expires_at);
-
-    const [microphoneTrack] = microphone.getAudioTracks();
-    if (!microphoneTrack) {
-      throw new Error("The microphone stream has no audio track");
-    }
     peerConnection.addTrack(microphoneTrack, microphone);
 
     const offer = await peerConnection.createOffer();
     if (!offer.sdp) {
-      throw new Error(`Chrome did not create SDP for the ${target} session`);
+      throw new Error("Chrome did not create an SDP offer");
     }
     await peerConnection.setLocalDescription(offer);
-    const response = await fetch(
-      "https://api.openai.com/v1/realtime/translations/calls",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${secret.value}`,
-          "Content-Type": "application/sdp",
-        },
-        body: offer.sdp,
-        signal: connectionAbort.signal,
-      },
-    );
+
+    const response = await fetch("/api/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/sdp" },
+      body: offer.sdp,
+      signal: connectionAbort.signal,
+    });
     if (!response.ok) {
       throw new Error(
-        `Could not negotiate the ${target} session (${response.status}): ${await response.text()}`,
+        `Could not negotiate the interpreter session (${response.status}): ${await response.text()}`,
       );
     }
     await peerConnection.setRemoteDescription({
@@ -329,6 +394,7 @@ export async function openTranslationSession(
       sdp: await response.text(),
     });
     await readyPromise;
+    callbacks.onCaptureState(true);
   } catch (error) {
     close();
     throw asError(error);
@@ -339,6 +405,5 @@ export async function openTranslationSession(
     get expiresAt() {
       return expiresAt;
     },
-    target,
   };
 }

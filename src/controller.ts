@@ -1,9 +1,9 @@
 import {
+  type InterpreterSession,
+  type InterpreterSessionCallbacks,
   type Milestone,
-  openTranslationSession,
-  type TargetLanguage,
-  type TranslationSession,
-  type TranslationSessionCallbacks,
+  openInterpreterSession,
+  type TranscriptUpdate,
 } from "./realtime";
 
 export type LifecycleState =
@@ -14,40 +14,36 @@ export type LifecycleState =
   | "stopping"
   | "error";
 
-export interface TranslationControllerCallbacks {
-  onDiagnostic: (target: TargetLanguage, eventType: string) => void;
+export interface InterpreterControllerCallbacks {
+  onCaptureState: (enabled: boolean) => void;
+  onDiagnostic: (eventType: string) => void;
+  onInputTranscript: (update: TranscriptUpdate) => void;
   onMicrophone: (settings: MediaTrackSettings) => void;
   onMilestone: (milestone: Milestone) => void;
-  onSourceTranscript: (delta: string) => void;
+  onOutputTranscript: (update: TranscriptUpdate) => void;
   onState: (state: LifecycleState, detail?: string) => void;
-  onTranslationTranscript: (target: TargetLanguage, delta: string) => void;
-}
-
-interface TranslationAudioElements {
-  en: HTMLAudioElement;
-  pt: HTMLAudioElement;
 }
 
 const MAX_RECONNECT_ATTEMPTS = 3;
 const RECONNECT_BEFORE_EXPIRY_MS = 60_000;
 
-export class TranslationController {
-  private readonly audioElements: TranslationAudioElements;
-  private readonly callbacks: TranslationControllerCallbacks;
-  private expiresAt = new Map<TargetLanguage, number>();
+export class InterpreterController {
+  private readonly audioElement: HTMLAudioElement;
+  private readonly callbacks: InterpreterControllerCallbacks;
+  private expiresAt: number | undefined;
   private microphone: MediaStream | undefined;
-  private pairAbort: AbortController | undefined;
   private reconnectAttempts = 0;
   private reconnectTimer: number | undefined;
   private runId = 0;
-  private sessions: TranslationSession[] = [];
+  private session: InterpreterSession | undefined;
+  private sessionAbort: AbortController | undefined;
   private state: LifecycleState = "idle";
 
   constructor(
-    audioElements: TranslationAudioElements,
-    callbacks: TranslationControllerCallbacks,
+    audioElement: HTMLAudioElement,
+    callbacks: InterpreterControllerCallbacks,
   ) {
-    this.audioElements = audioElements;
+    this.audioElement = audioElement;
     this.callbacks = callbacks;
   }
 
@@ -70,9 +66,7 @@ export class TranslationController {
         },
       });
       if (runId !== this.runId) {
-        this.microphone.getTracks().forEach((track) => {
-          track.stop();
-        });
+        this.stopTracks(this.microphone);
         return;
       }
 
@@ -81,7 +75,7 @@ export class TranslationController {
         throw new Error("No microphone audio track is available");
       }
       this.callbacks.onMicrophone(track.getSettings());
-      await this.connectPair(runId);
+      await this.connect(runId);
     } catch (error) {
       if (runId !== this.runId) {
         return;
@@ -102,77 +96,49 @@ export class TranslationController {
     this.setState("idle");
   }
 
-  private async connectPair(runId: number): Promise<void> {
+  private async connect(runId: number): Promise<void> {
     if (!this.microphone) {
-      throw new Error("Microphone capture ended before sessions connected");
+      throw new Error("Microphone capture ended before the session connected");
     }
 
-    this.closePair();
-    const pairAbort = new AbortController();
-    this.pairAbort = pairAbort;
-    this.expiresAt.clear();
-    const pairGeneration = pairAbort;
+    this.closeSession();
+    const sessionAbort = new AbortController();
+    this.sessionAbort = sessionAbort;
 
-    const callbacks: TranslationSessionCallbacks = {
+    const callbacks: InterpreterSessionCallbacks = {
+      onCaptureState: this.callbacks.onCaptureState,
       onDiagnostic: this.callbacks.onDiagnostic,
-      onExpiry: (target, expiry) => {
-        if (this.pairAbort !== pairGeneration) {
+      onExpiry: (expiry) => {
+        if (this.sessionAbort !== sessionAbort) {
           return;
         }
-        this.expiresAt.set(target, expiry);
+        this.expiresAt = expiry;
         this.scheduleExpiryReconnect(runId);
       },
-      onFailure: (target, error) => {
-        if (this.pairAbort !== pairGeneration) {
-          return;
+      onFailure: (error) => {
+        if (this.sessionAbort === sessionAbort) {
+          this.requestReconnect(runId, error.message);
         }
-        this.requestReconnect(runId, `${target}: ${error.message}`);
       },
+      onInputTranscript: this.callbacks.onInputTranscript,
       onMilestone: this.callbacks.onMilestone,
-      onSourceTranscript: this.callbacks.onSourceTranscript,
-      onTranslationTranscript: this.callbacks.onTranslationTranscript,
+      onOutputTranscript: this.callbacks.onOutputTranscript,
     };
 
-    const results = await Promise.allSettled([
-      openTranslationSession({
-        audioElement: this.audioElements.pt,
-        callbacks,
-        microphone: this.microphone,
-        signal: pairAbort.signal,
-        target: "pt",
-        transcribe: true,
-      }),
-      openTranslationSession({
-        audioElement: this.audioElements.en,
-        callbacks,
-        microphone: this.microphone,
-        signal: pairAbort.signal,
-        target: "en",
-        transcribe: false,
-      }),
-    ]);
+    const session = await openInterpreterSession({
+      audioElement: this.audioElement,
+      callbacks,
+      microphone: this.microphone,
+      signal: sessionAbort.signal,
+    });
 
-    const connected = results.flatMap((result) =>
-      result.status === "fulfilled" ? [result.value] : [],
-    );
-    if (runId !== this.runId || this.pairAbort !== pairGeneration) {
-      connected.forEach((session) => {
-        session.close();
-      });
+    if (runId !== this.runId || this.sessionAbort !== sessionAbort) {
+      session.close();
       return;
     }
 
-    const failure = results.find(
-      (result): result is PromiseRejectedResult => result.status === "rejected",
-    );
-    if (failure) {
-      connected.forEach((session) => {
-        session.close();
-      });
-      throw this.errorValue(failure.reason);
-    }
-
-    this.sessions = connected;
+    this.session = session;
+    this.expiresAt = session.expiresAt;
     this.reconnectAttempts = 0;
     this.setState("listening");
     this.scheduleExpiryReconnect(runId);
@@ -191,17 +157,17 @@ export class TranslationController {
 
     if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
       this.releaseResources();
-      this.setState("error", `Translation stopped after repeated failures: ${reason}`);
+      this.setState("error", `Interpreter stopped after repeated failures: ${reason}`);
       return;
     }
 
     this.reconnectAttempts += 1;
     const delay = 2 ** (this.reconnectAttempts - 1) * 1_000;
     this.setState("reconnecting", `${reason}. Retrying in ${delay / 1_000} seconds`);
-    this.closePair();
+    this.closeSession();
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = undefined;
-      void this.connectPair(runId).catch((error: unknown) => {
+      void this.connect(runId).catch((error: unknown) => {
         if (runId === this.runId) {
           this.requestReconnect(runId, this.errorMessage(error));
         }
@@ -210,40 +176,41 @@ export class TranslationController {
   }
 
   private scheduleExpiryReconnect(runId: number): void {
-    if (this.expiresAt.size !== 2 || this.state !== "listening") {
+    if (!this.expiresAt || this.state !== "listening") {
       return;
     }
 
-    const earliestExpiry = Math.min(...this.expiresAt.values()) * 1_000;
     const delay = Math.max(
       1_000,
-      earliestExpiry - Date.now() - RECONNECT_BEFORE_EXPIRY_MS,
+      this.expiresAt * 1_000 - Date.now() - RECONNECT_BEFORE_EXPIRY_MS,
     );
     window.clearTimeout(this.reconnectTimer);
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = undefined;
-      this.requestReconnect(runId, "Refreshing expiring translation sessions");
+      this.requestReconnect(runId, "Refreshing the expiring interpreter session");
     }, delay);
   }
 
-  private closePair(): void {
-    this.pairAbort?.abort();
-    this.pairAbort = undefined;
-    this.sessions.forEach((session) => {
-      session.close();
-    });
-    this.sessions = [];
-    this.expiresAt.clear();
+  private closeSession(): void {
+    this.sessionAbort?.abort();
+    this.sessionAbort = undefined;
+    this.session?.close();
+    this.session = undefined;
+    this.expiresAt = undefined;
   }
 
   private releaseResources(): void {
     window.clearTimeout(this.reconnectTimer);
     this.reconnectTimer = undefined;
-    this.closePair();
-    this.microphone?.getTracks().forEach((track) => {
+    this.closeSession();
+    this.stopTracks(this.microphone);
+    this.microphone = undefined;
+  }
+
+  private stopTracks(stream: MediaStream | undefined): void {
+    stream?.getTracks().forEach((track) => {
       track.stop();
     });
-    this.microphone = undefined;
   }
 
   private setState(state: LifecycleState, detail?: string): void {
@@ -252,10 +219,6 @@ export class TranslationController {
   }
 
   private errorMessage(value: unknown): string {
-    return this.errorValue(value).message;
-  }
-
-  private errorValue(value: unknown): Error {
-    return value instanceof Error ? value : new Error(String(value));
+    return value instanceof Error ? value.message : String(value);
   }
 }

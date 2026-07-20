@@ -1,31 +1,36 @@
 # Sther
 
-Live English and Brazilian Portuguese speech translation in a desktop browser.
-Sther captures one shared microphone and sends it to two independent OpenAI
-translation sessions, one for each output language.
+Live English and Brazilian Portuguese interpretation in a desktop browser.
+Sther listens to the conversation through one microphone and uses one OpenAI
+Realtime session to translate each spoken turn into the other language.
 
 The page is intentionally small. It has Start and Stop controls, a connection
-status, live text in both languages, and native WebRTC audio playback.
+status, the speech that was heard, the latest translations, and native WebRTC
+audio playback.
 
 ## How it works
 
 ```text
-                                  ┌─ gpt-realtime-translate → Portuguese
-Microphone → two WebRTC sessions ─┤
-                                  └─ gpt-realtime-translate → English
+Microphone → one gpt-realtime-2.1 WebRTC session → opposite-language speech
 ```
 
-- Chrome captures one 48 kHz microphone track with echo cancellation, noise
+- Chrome captures one microphone track with echo cancellation, noise
   suppression, and automatic gain control.
-- The same track is attached to two `RTCPeerConnection` instances.
-- Each translated remote stream plays through its own native `<audio>` element.
-- One session also runs `gpt-realtime-whisper` for the English source
-  transcript.
-- A small Cloudflare Worker keeps the standard API key server-side and returns
-  short-lived client secrets to the browser.
+- A single conversation session identifies whether each turn is English or
+  Brazilian Portuguese and interprets it into the other language.
+- Semantic VAD determines when each speaker has finished. The browser decides
+  whether that turn is genuine before requesting a response.
+- `gpt-realtime-whisper` supplies the source transcript.
+- The remote stream plays through one native `<audio>` element.
+- The microphone sender pauses while translated audio is playing. Any turn
+  detected during playback is discarded, then capture resumes after the
+  speaker and echo canceller have settled.
+- A small Cloudflare Worker proxies the WebRTC offer to OpenAI so the standard
+  API key remains server-side.
 
 See [the architecture note](docs/architecture/realtime-translation.md) for the
-protocol, limits, measured latency, pricing, and acoustic test results.
+failed dual-session design, the replacement decision, protocol details, and
+test evidence.
 
 ## Local setup
 
@@ -98,12 +103,13 @@ state.
 | `npm run verify` | Run typecheck, lint, tests, and build |
 | `npm run deploy` | Build and deploy the Cloudflare Worker |
 
-## Current operating cost
+## Cost
 
-OpenAI currently lists USD 0.034 per translation audio minute and USD 0.017 per
-transcription audio minute. Two translation sessions and one transcription
-session cost about USD 0.085 per wall-clock minute, or USD 5.10 per hour, while
-listening continuously.
+`gpt-realtime-2.1` is billed from realtime audio and text tokens. Cost therefore
+depends on turn length, conversation history, and cache use rather than a fixed
+per-minute translation rate. Check the
+[current OpenAI pricing](https://developers.openai.com/api/docs/pricing#audio-tokens)
+before sustained use.
 
 ## License
 

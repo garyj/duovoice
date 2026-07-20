@@ -1,14 +1,10 @@
+import { SESSION_CONFIG } from "./session-config";
+
 interface Env {
   OPENAI_API_KEY?: string;
 }
 
-interface SessionRequest {
-  target?: unknown;
-  transcribe?: unknown;
-}
-
-const OPENAI_CLIENT_SECRETS_URL =
-  "https://api.openai.com/v1/realtime/translations/client_secrets";
+const OPENAI_REALTIME_CALLS_URL = "https://api.openai.com/v1/realtime/calls";
 
 function jsonResponse(body: unknown, status: number): Response {
   return Response.json(body, {
@@ -31,48 +27,43 @@ async function createSession(request: Request, env: Env): Promise<Response> {
     );
   }
 
-  let body: SessionRequest;
-  try {
-    body = (await request.json()) as SessionRequest;
-  } catch {
-    return jsonResponse({ error: "Request body must be valid JSON" }, 400);
+  if (!request.headers.get("Content-Type")?.startsWith("application/sdp")) {
+    return jsonResponse({ error: "Content-Type must be application/sdp" }, 415);
   }
 
-  if (body.target !== "en" && body.target !== "pt") {
-    return jsonResponse({ error: "target must be en or pt" }, 400);
-  }
-  if (typeof body.transcribe !== "boolean") {
-    return jsonResponse({ error: "transcribe must be a boolean" }, 400);
+  const offer = await request.text();
+  if (!offer.trim()) {
+    return jsonResponse({ error: "The SDP offer must not be empty" }, 400);
   }
 
-  const transcription = body.transcribe
-    ? { transcription: { model: "gpt-realtime-whisper" } }
-    : {};
-  const response = await fetch(OPENAI_CLIENT_SECRETS_URL, {
+  const body = new FormData();
+  body.set("sdp", offer);
+  body.set("session", JSON.stringify(SESSION_CONFIG));
+
+  const response = await fetch(OPENAI_REALTIME_CALLS_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      expires_after: { anchor: "created_at", seconds: 600 },
-      session: {
-        model: "gpt-realtime-translate",
-        audio: {
-          input: {
-            noise_reduction: { type: "near_field" },
-            ...transcription,
-          },
-          output: { language: body.target },
-        },
-      },
-    }),
+    body,
   });
 
   if (!response.ok) {
+    const details = await response.text();
+    let message = "OpenAI could not create the interpreter session";
+    try {
+      const payload = JSON.parse(details) as { error?: { message?: unknown } };
+      if (typeof payload.error?.message === "string") {
+        message = payload.error.message;
+      }
+    } catch {
+      if (details.trim()) {
+        message = details.trim();
+      }
+    }
     return jsonResponse(
       {
-        error: `OpenAI could not create the ${body.target} session`,
+        error: message,
         status: response.status,
       },
       502,
@@ -80,10 +71,10 @@ async function createSession(request: Request, env: Env): Promise<Response> {
   }
 
   return new Response(response.body, {
-    status: 200,
+    status: response.status,
     headers: {
       "Cache-Control": "no-store",
-      "Content-Type": "application/json; charset=utf-8",
+      "Content-Type": response.headers.get("Content-Type") ?? "application/sdp",
       "X-Content-Type-Options": "nosniff",
     },
   });
