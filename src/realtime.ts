@@ -1,3 +1,4 @@
+import { SESSION_CONFIG } from "./session-config";
 import { type TurnAction, TurnCoordinator } from "./turns";
 
 export type SessionMilestone =
@@ -34,6 +35,7 @@ export interface InterpreterSessionCallbacks {
 }
 
 export interface OpenInterpreterSessionOptions {
+  apiKey: string;
   audioElement: HTMLAudioElement;
   callbacks: InterpreterSessionCallbacks;
   microphone: MediaStream;
@@ -48,11 +50,20 @@ export interface InterpreterSession {
 interface RealtimeEvent {
   delta?: string;
   error?: {
+    code?: string;
     message?: string;
+    type?: string;
   };
   item_id?: string;
   response?: {
     id?: string;
+    status?: string;
+    status_details?: {
+      error?: {
+        message?: string;
+      };
+      reason?: string;
+    };
   };
   response_id?: string;
   session?: {
@@ -64,6 +75,8 @@ interface RealtimeEvent {
 
 const CONNECTION_TIMEOUT_MS = 20_000;
 const DISCONNECTED_GRACE_MS = 3_000;
+const OPENAI_REALTIME_CALLS_URL = "https://api.openai.com/v1/realtime/calls";
+const RESPONSE_TIMEOUT_MS = 30_000;
 
 function asError(value: unknown): Error {
   return value instanceof Error ? value : new Error(String(value));
@@ -84,7 +97,7 @@ function requireAudioTrack(stream: MediaStream): MediaStreamTrack {
 export async function openInterpreterSession(
   options: OpenInterpreterSessionOptions,
 ): Promise<InterpreterSession> {
-  const { audioElement, callbacks, microphone, signal } = options;
+  const { apiKey, audioElement, callbacks, microphone, signal } = options;
   const microphoneTrack = requireAudioTrack(microphone);
 
   const startedAt = performance.now();
@@ -95,8 +108,11 @@ export async function openInterpreterSession(
   let dataChannelOpen = false;
   let disconnectedTimer: number | undefined;
   let connectionTimer: number | undefined;
+  let responseTimer: number | undefined;
   let expiresAt: number | undefined;
   const ignoredInputItemIds = new Set<string>();
+  const interruptedResponseIds = new Set<string>();
+  let currentResponseId: string | undefined;
   let outputPlaying = false;
   let ready = false;
   let sessionCreated = false;
@@ -138,18 +154,27 @@ export async function openInterpreterSession(
     }
   }
 
-  function sendClientEvent(eventType: string, fields: Record<string, unknown> = {}) {
+  function sendClientEvent(
+    eventType: string,
+    fields: Record<string, unknown> = {},
+  ): boolean {
     if (dataChannel.readyState !== "open") {
       fail(new Error(`Could not send ${eventType} before the event channel opened`));
-      return;
+      return false;
     }
     dataChannel.send(JSON.stringify({ type: eventType, ...fields }));
     callbacks.onDiagnostic(`client.${eventType}`);
+    return true;
   }
 
   function applyTurnAction(action: TurnAction, itemId?: string) {
     if (action === "respond") {
-      sendClientEvent("response.create");
+      if (sendClientEvent("response.create")) {
+        window.clearTimeout(responseTimer);
+        responseTimer = window.setTimeout(() => {
+          fail(new Error("The interpreter response timed out"));
+        }, RESPONSE_TIMEOUT_MS);
+      }
     } else if (action === "delete" && itemId) {
       ignoredInputItemIds.add(itemId);
       sendClientEvent("conversation.item.delete", { item_id: itemId });
@@ -165,6 +190,10 @@ export async function openInterpreterSession(
   }
 
   function handleMessage(event: MessageEvent<string>) {
+    if (closing) {
+      return;
+    }
+
     let message: RealtimeEvent;
     try {
       message = JSON.parse(event.data) as RealtimeEvent;
@@ -185,6 +214,9 @@ export async function openInterpreterSession(
         break;
       case "input_audio_buffer.speech_started":
         if (turns.speechStarted() || outputPlaying) {
+          if (currentResponseId) {
+            interruptedResponseIds.add(currentResponseId);
+          }
           callbacks.onDiagnostic("barge-in");
           mark("barge-in");
         }
@@ -198,6 +230,7 @@ export async function openInterpreterSession(
         applyTurnAction(turns.turnCommitted(), message.item_id);
         break;
       case "response.created":
+        currentResponseId = message.response?.id;
         turns.responseCreated();
         mark("response-started");
         break;
@@ -212,10 +245,27 @@ export async function openInterpreterSession(
         callbacks.onOutputState(false);
         break;
       case "response.done":
+        window.clearTimeout(responseTimer);
+        responseTimer = undefined;
         if (!outputPlaying) {
           callbacks.onOutputState(false);
         }
-        applyTurnAction(turns.responseDone());
+        if (
+          message.response?.status === "failed" ||
+          message.response?.status === "incomplete"
+        ) {
+          turns.responseDone();
+          fail(
+            new Error(
+              message.response.status_details?.error?.message ??
+                message.response.status_details?.reason ??
+                `The interpreter response ${message.response.status}`,
+            ),
+          );
+        } else {
+          applyTurnAction(turns.responseDone());
+        }
+        currentResponseId = undefined;
         break;
       case "conversation.item.input_audio_transcription.delta":
         if (
@@ -254,18 +304,22 @@ export async function openInterpreterSession(
         break;
       case "response.output_audio_transcript.done":
         if (typeof message.transcript === "string") {
+          const responseId = message.response_id ?? message.response?.id;
+          const interrupted = Boolean(
+            responseId && interruptedResponseIds.delete(responseId),
+          );
           callbacks.onOutputTranscript({
             final: true,
             id: transcriptId(message, "output"),
-            text: message.transcript,
+            text: interrupted
+              ? `${message.transcript}\n(interrupted)`
+              : message.transcript,
           });
         }
         break;
       case "error":
-        fail(
-          new Error(
-            message.error?.message ?? "The interpreter session returned an error",
-          ),
+        callbacks.onDiagnostic(
+          `server.error.${message.error?.code ?? message.error?.type ?? "unknown"}`,
         );
         break;
     }
@@ -284,7 +338,9 @@ export async function openInterpreterSession(
     closing = true;
     window.clearTimeout(connectionTimer);
     window.clearTimeout(disconnectedTimer);
+    window.clearTimeout(responseTimer);
     signal.removeEventListener("abort", close);
+    dataChannel.removeEventListener("message", handleMessage);
     connectionAbort.abort();
     dataChannel.close();
     peerConnection.close();
@@ -355,10 +411,14 @@ export async function openInterpreterSession(
     }
     await peerConnection.setLocalDescription(offer);
 
-    const response = await fetch("/api/session", {
+    const body = new FormData();
+    body.set("sdp", offer.sdp);
+    body.set("session", JSON.stringify(SESSION_CONFIG));
+
+    const response = await fetch(OPENAI_REALTIME_CALLS_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/sdp" },
-      body: offer.sdp,
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body,
       signal: connectionAbort.signal,
     });
     if (!response.ok) {

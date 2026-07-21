@@ -31,6 +31,24 @@
         </div>
       </header>
 
+      <details id="credentials" class="credentials">
+        <summary>OpenAI API key</summary>
+        <form id="api-key-form" class="credentials-form">
+          <label for="api-key">API key</label>
+          <input
+            id="api-key"
+            name="api-key"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="sk-..."
+          />
+          <button id="save-api-key" class="secondary" type="submit">Save</button>
+          <button id="clear-api-key" class="secondary" type="button">Clear</button>
+          <span id="api-key-status" aria-live="polite"></span>
+        </form>
+      </details>
+
       <section class="status-row" aria-live="polite">
         <span class="status-dot" aria-hidden="true"></span>
         <output id="status">Ready</output>

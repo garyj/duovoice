@@ -5,11 +5,10 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "deploy": "npm run build && wrangler deploy",
-    "dev": "npm run build && wrangler dev --port 3000",
+    "dev": "vite --port 3000",
     "format": "biome check --write .",
     "lint": "biome ci .",
-    "preview": "wrangler dev --port 3000",
+    "preview": "vite preview --port 3000",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "verify": "npm run typecheck && npm run lint && npm test && npm run build"
@@ -18,7 +17,6 @@
     "@biomejs/biome": "^2.5.4",
     "typescript": "^7.0.2",
     "vite": "^8.1.5",
-    "vitest": "^4.1.10",
-    "wrangler": "^4.112.0"
+    "vitest": "^4.1.10"
   }
 }

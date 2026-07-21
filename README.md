@@ -24,10 +24,10 @@ Microphone → one gpt-realtime-2.1 WebRTC session → opposite-language speech
 - The remote stream plays through one native `<audio>` element.
 - The microphone remains live during translated audio. New speech interrupts
   and truncates the current translation so conversation can continue naturally.
-- Chrome's WebRTC echo cancellation prevents interpreter audio from becoming a
+- Chrome's WebRTC echo cancellation reduces interpreter audio returning as a
   new user turn, while the browser retains control of response creation.
-- A small Cloudflare Worker proxies the WebRTC offer to OpenAI so the standard
-  API key remains server-side.
+- Each browser supplies its own OpenAI API key and negotiates the WebRTC session
+  directly with OpenAI.
 
 See [the architecture note](docs/architecture/realtime-translation.md) for the
 failed dual-session design, the replacement decision, protocol details, and
@@ -47,62 +47,37 @@ Install dependencies:
 npm install
 ```
 
-Create Wrangler's ignored local secret file:
-
-```bash
-cp .env.example .dev.vars
-```
-
-Set `OPENAI_API_KEY` in `.dev.vars`. If the key already lives in an ignored
-`.env.local`, a local symlink also works:
-
-```bash
-ln -s .env.local .dev.vars
-```
-
-Start the production build through the local Cloudflare Worker:
+Start the local Vite server:
 
 ```bash
 npm run dev
 ```
 
-Open `http://localhost:3000`, allow microphone access, and select **Start
-listening**.
+Open `http://localhost:3000`, save your OpenAI API key in the page, allow
+microphone access, and select **Start listening**.
 
-The standard API key never enters the browser bundle, browser storage, request
-logs, or page UI.
+The key is stored in that browser's local storage and sent only to OpenAI when
+the browser creates a Realtime session. Clearing site data or selecting
+**Clear** removes it. This is a deliberate personal-tool tradeoff, not an
+encrypted credential store.
 
-## Cloudflare deployment
+## Cloudflare Pages deployment
 
-The same Worker serves Vite's static output and runs first for `/api/*`.
-Configure the production secret once:
-
-```bash
-npx wrangler secret put OPENAI_API_KEY
-```
-
-Build and deploy:
-
-```bash
-npm run deploy
-```
-
-`wrangler.jsonc` contains the Worker and static-assets configuration. Production
-deployment is intentionally a user-run operation because it changes external
-state.
+Sther is a static Vite app. Configure Cloudflare Pages to run `npm run build`
+and publish `dist`. There is no server-side key or Worker. Each visitor supplies
+their own key in their own browser.
 
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
-| `npm run dev` | Build and run the complete app locally through Wrangler |
+| `npm run dev` | Run the local Vite development server |
 | `npm run typecheck` | Run strict TypeScript 7 checks |
 | `npm run lint` | Run Biome CI checks |
 | `npm run format` | Apply Biome formatting and safe fixes |
 | `npm test` | Run the Vitest suite once |
 | `npm run build` | Create the Vite production build |
 | `npm run verify` | Run typecheck, lint, tests, and build |
-| `npm run deploy` | Build and deploy the Cloudflare Worker |
 
 ## Cost
 

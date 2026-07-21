@@ -78,18 +78,17 @@ The app uses OpenAI's unified WebRTC interface:
 1. Chrome captures one microphone track.
 2. The browser creates one `RTCPeerConnection`, one remote `<audio>` element,
    and one `oai-events` data channel.
-3. The browser creates an SDP offer and sends it to `POST /api/session` as
-   `application/sdp`.
-4. The Cloudflare Worker combines the offer with the server-owned session
-   configuration in multipart form data.
-5. The Worker posts that form to `POST /v1/realtime/calls` using the standard
-   API key.
-6. The Worker returns OpenAI's SDP answer to the browser.
-7. The browser installs the answer and then relies on the WebRTC media path for
+3. The browser combines its SDP offer and the session configuration in
+   multipart form data.
+4. The browser posts that form directly to OpenAI's
+   `POST /v1/realtime/calls` endpoint using the API key saved in local storage.
+5. OpenAI returns the SDP answer to the browser.
+6. The browser installs the answer and then relies on the WebRTC media path for
    microphone input and translated audio output.
 
-The standard API key never enters the browser. The Worker route and its response
-are not cacheable.
+This browser-held key is a deliberate personal-tool tradeoff. A public copy of
+the static app has no shared credential, so every visitor must supply their own
+key.
 
 ## Transcript events
 

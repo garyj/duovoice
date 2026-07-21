@@ -16,19 +16,18 @@ npm run build
 npm run verify
 ```
 
-`npm run dev` builds the Vite client and serves it with the local Cloudflare
-Worker at `http://localhost:3000`.
+`npm run dev` serves the Vite client at `http://localhost:3000`.
 
 ## Architecture
 
 - `src/realtime.ts` owns the single OpenAI Realtime WebRTC session, transcript
-  events, native remote audio, and microphone echo gate.
+  events, and native remote audio.
 - `src/controller.ts` owns microphone capture, lifecycle state, bounded
-  reconnects, expiry refresh, and cleanup.
+  reconnect delays, expiry refresh, and cleanup.
+- `src/api-key.ts` owns browser-local OpenAI API key persistence.
+- `src/session-config.ts` owns the interpreter prompt and Realtime settings.
 - `src/transcripts.ts` owns rolling source and translation text.
 - `src/main.ts` binds the controller to the small DOM interface.
-- `worker/index.ts` proxies the browser's SDP offer with the server-owned
-  interpreter session configuration.
 - `docs/architecture/realtime-translation.md` records the architecture decision
   and evidence.
 
@@ -47,16 +46,16 @@ Do not replace this with a microphone mute or acoustic delay. Do not remove the
 client-controlled response step without a real acoustic test proving that the
 interpreter cannot respond to its own output.
 
-The standard OpenAI API key belongs only in `.dev.vars` locally or a Cloudflare
-Worker secret in production. Never expose it to client code, browser storage, or
-Vite environment substitution.
+The user supplies a standard OpenAI API key in the page. The app stores it in
+local storage and sends it directly to OpenAI's Realtime WebRTC endpoint. Do not
+add a shared server-side key.
 
 ## Verification
 
 Before reporting completion:
 
 1. Run strict TypeScript, Biome, Vitest, and the Vite production build.
-2. Run the app through Wrangler, not Vite alone.
+2. Run the app through Vite.
 3. Exercise Start, English to Portuguese, Portuguese to English, Stop, and
    restart in headed desktop Chrome.
 4. Check source and translation transcript events, native audio playback,

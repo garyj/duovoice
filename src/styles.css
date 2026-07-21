@@ -41,6 +41,7 @@ button:hover:not(:disabled) {
 }
 
 button:focus-visible,
+input:focus-visible,
 summary:focus-visible {
   outline: 3px solid #2c6e60;
   outline-offset: 3px;
@@ -115,6 +116,42 @@ h1 {
 .secondary {
   color: #25312c;
   background: #e0dbcf;
+}
+
+.credentials {
+  padding: 14px 0 2px;
+  color: #596158;
+  font-size: 0.82rem;
+}
+
+.credentials summary {
+  width: fit-content;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.credentials-form {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) auto auto minmax(120px, auto);
+  gap: 10px;
+  align-items: center;
+  max-width: 760px;
+  margin-top: 12px;
+}
+
+.credentials-form input {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid #c8c1b4;
+  border-radius: 8px;
+  color: #25312c;
+  background: #fffdf8;
+  font: inherit;
+}
+
+.credentials-form .secondary {
+  min-width: 0;
+  padding: 11px 16px;
 }
 
 .status-row {
@@ -254,6 +291,16 @@ audio {
 
   .actions button {
     flex: 1;
+  }
+
+  .credentials-form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .credentials-form label,
+  .credentials-form input,
+  #api-key-status {
+    grid-column: 1 / -1;
   }
 
   .transcripts {

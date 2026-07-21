@@ -1,3 +1,4 @@
+import { clearOpenAiKey, loadOpenAiKey, saveOpenAiKey } from "./api-key";
 import { InterpreterController, type LifecycleState } from "./controller";
 import type { Milestone, SessionMilestone } from "./realtime";
 import { type TranscriptSnapshot, Transcripts } from "./transcripts";
@@ -13,6 +14,12 @@ function requiredElement<T extends Element>(selector: string): T {
 
 const startButton = requiredElement<HTMLButtonElement>("#start");
 const stopButton = requiredElement<HTMLButtonElement>("#stop");
+const credentials = requiredElement<HTMLDetailsElement>("#credentials");
+const apiKeyForm = requiredElement<HTMLFormElement>("#api-key-form");
+const apiKeyInput = requiredElement<HTMLInputElement>("#api-key");
+const apiKeyStatus = requiredElement<HTMLElement>("#api-key-status");
+const clearApiKeyButton = requiredElement<HTMLButtonElement>("#clear-api-key");
+const saveApiKeyButton = requiredElement<HTMLButtonElement>("#save-api-key");
 const status = requiredElement<HTMLOutputElement>("#status");
 const statusDetail = requiredElement<HTMLElement>("#status-detail");
 const heardText = requiredElement<HTMLElement>("#heard-text");
@@ -68,6 +75,14 @@ function renderState() {
     lifecycleState === "reconnecting";
   startButton.disabled = active || lifecycleState === "stopping";
   stopButton.disabled = !active;
+  apiKeyInput.disabled = active;
+  clearApiKeyButton.disabled = active;
+  saveApiKeyButton.disabled = active;
+}
+
+function renderApiKey() {
+  const saved = Boolean(loadOpenAiKey());
+  apiKeyStatus.textContent = saved ? "Saved in this browser" : "Not saved";
 }
 
 const controller = new InterpreterController(interpreterAudio, {
@@ -108,17 +123,46 @@ const controller = new InterpreterController(interpreterAudio, {
 });
 
 startButton.addEventListener("click", () => {
+  const apiKey = loadOpenAiKey();
+  if (!apiKey) {
+    credentials.open = true;
+    apiKeyInput.focus();
+    lifecycleDetail = "Add an OpenAI API key first";
+    renderState();
+    return;
+  }
+
   milestones.clear();
   recentEvents.length = 0;
   outputPlaying = false;
   microphoneDetails.textContent = "Waiting for microphone";
   renderTranscripts(transcripts.clear());
   renderDiagnostics();
-  void controller.start();
+  void controller.start(apiKey);
 });
 
 stopButton.addEventListener("click", () => controller.stop());
+apiKeyForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const apiKey = apiKeyInput.value.trim();
+  if (!apiKey) {
+    apiKeyStatus.textContent = "Enter an API key";
+    return;
+  }
+  saveOpenAiKey(apiKey);
+  lifecycleDetail = "";
+  renderApiKey();
+  renderState();
+  credentials.open = false;
+});
+clearApiKeyButton.addEventListener("click", () => {
+  clearOpenAiKey();
+  apiKeyInput.value = "";
+  renderApiKey();
+});
 window.addEventListener("pagehide", () => controller.stop());
 
+apiKeyInput.value = loadOpenAiKey();
+renderApiKey();
 renderTranscripts(transcripts.snapshot());
 renderState();

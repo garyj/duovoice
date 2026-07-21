@@ -24,12 +24,14 @@ export interface InterpreterControllerCallbacks {
   onState: (state: LifecycleState, detail?: string) => void;
 }
 
-const MAX_RECONNECT_ATTEMPTS = 3;
+const MAX_RECONNECT_DELAY_MS = 10_000;
 const RECONNECT_BEFORE_EXPIRY_MS = 60_000;
 
 export class InterpreterController {
+  private apiKey = "";
   private readonly audioElement: HTMLAudioElement;
   private readonly callbacks: InterpreterControllerCallbacks;
+  private expiryTimer: number | undefined;
   private expiresAt: number | undefined;
   private microphone: MediaStream | undefined;
   private reconnectAttempts = 0;
@@ -47,18 +49,19 @@ export class InterpreterController {
     this.callbacks = callbacks;
   }
 
-  async start(): Promise<void> {
+  async start(apiKey: string): Promise<void> {
     if (this.state !== "idle" && this.state !== "error") {
       return;
     }
 
     this.releaseResources();
+    this.apiKey = apiKey;
     const runId = ++this.runId;
     this.reconnectAttempts = 0;
     this.setState("connecting");
 
     try {
-      this.microphone = await navigator.mediaDevices.getUserMedia({
+      const microphone = await navigator.mediaDevices.getUserMedia({
         audio: {
           autoGainControl: true,
           echoCancellation: true,
@@ -66,14 +69,18 @@ export class InterpreterController {
         },
       });
       if (runId !== this.runId) {
-        this.stopTracks(this.microphone);
+        this.stopTracks(microphone);
         return;
       }
 
-      const [track] = this.microphone.getAudioTracks();
+      this.microphone = microphone;
+      const [track] = microphone.getAudioTracks();
       if (!track) {
         throw new Error("No microphone audio track is available");
       }
+      track.addEventListener("ended", () => this.handleMicrophoneEnded(runId, track), {
+        once: true,
+      });
       this.callbacks.onMicrophone(track.getSettings());
       await this.connect(runId);
     } catch (error) {
@@ -97,7 +104,8 @@ export class InterpreterController {
   }
 
   private async connect(runId: number): Promise<void> {
-    if (!this.microphone) {
+    const [track] = this.microphone?.getAudioTracks() ?? [];
+    if (!this.microphone || !track || track.readyState !== "live") {
       throw new Error("Microphone capture ended before the session connected");
     }
 
@@ -126,6 +134,7 @@ export class InterpreterController {
     };
 
     const session = await openInterpreterSession({
+      apiKey: this.apiKey,
       audioElement: this.audioElement,
       callbacks,
       microphone: this.microphone,
@@ -155,15 +164,21 @@ export class InterpreterController {
       return;
     }
 
-    if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    const [track] = this.microphone?.getAudioTracks() ?? [];
+    if (track?.readyState !== "live") {
       this.releaseResources();
-      this.setState("error", `Interpreter stopped after repeated failures: ${reason}`);
+      this.setState("error", "Microphone capture ended");
       return;
     }
 
     this.reconnectAttempts += 1;
-    const delay = 2 ** (this.reconnectAttempts - 1) * 1_000;
+    const delay = Math.min(
+      2 ** (this.reconnectAttempts - 1) * 1_000,
+      MAX_RECONNECT_DELAY_MS,
+    );
     this.setState("reconnecting", `${reason}. Retrying in ${delay / 1_000} seconds`);
+    window.clearTimeout(this.expiryTimer);
+    this.expiryTimer = undefined;
     this.closeSession();
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = undefined;
@@ -184,11 +199,21 @@ export class InterpreterController {
       1_000,
       this.expiresAt * 1_000 - Date.now() - RECONNECT_BEFORE_EXPIRY_MS,
     );
-    window.clearTimeout(this.reconnectTimer);
-    this.reconnectTimer = window.setTimeout(() => {
-      this.reconnectTimer = undefined;
+    window.clearTimeout(this.expiryTimer);
+    this.expiryTimer = window.setTimeout(() => {
+      this.expiryTimer = undefined;
       this.requestReconnect(runId, "Refreshing the expiring interpreter session");
     }, delay);
+  }
+
+  private handleMicrophoneEnded(runId: number, track: MediaStreamTrack): void {
+    if (runId !== this.runId || !this.microphone?.getAudioTracks().includes(track)) {
+      return;
+    }
+
+    ++this.runId;
+    this.releaseResources();
+    this.setState("error", "Microphone disconnected");
   }
 
   private closeSession(): void {
@@ -200,6 +225,8 @@ export class InterpreterController {
   }
 
   private releaseResources(): void {
+    window.clearTimeout(this.expiryTimer);
+    this.expiryTimer = undefined;
     window.clearTimeout(this.reconnectTimer);
     this.reconnectTimer = undefined;
     this.closeSession();
