@@ -13,7 +13,7 @@ describe("interpreter session configuration", () => {
           transcription: { model: "gpt-realtime-whisper" },
           turn_detection: {
             type: "semantic_vad",
-            eagerness: "auto",
+            eagerness: "low",
             create_response: false,
             interrupt_response: true,
           },

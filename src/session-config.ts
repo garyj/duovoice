@@ -28,7 +28,7 @@ export const SESSION_CONFIG = {
       },
       turn_detection: {
         type: "semantic_vad",
-        eagerness: "auto",
+        eagerness: "low",
         create_response: false,
         interrupt_response: true,
       },
