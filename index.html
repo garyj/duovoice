@@ -1,14 +1,89 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DuoVoice Live</title>
+    <meta
+      name="description"
+      content="Live English and Brazilian Portuguese speech translation."
+    />
+    <title>Sther | Live voice translation</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="/index.css" />
   </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+  <body data-state="idle">
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Sther</p>
+          <h1>Speak naturally.<br />Hear the translation.</h1>
+          <p class="caption">
+            One careful interpreter for natural English and Brazilian Portuguese
+            conversation, with natural turn-taking and interruptions.
+          </p>
+        </div>
+        <div class="actions">
+          <button id="start" class="primary" type="button">
+            Start listening
+          </button>
+          <button id="stop" class="secondary" type="button" disabled>
+            Stop
+          </button>
+        </div>
+      </header>
+
+      <details id="credentials" class="credentials">
+        <summary>OpenAI API key</summary>
+        <form id="api-key-form" class="credentials-form">
+          <label for="api-key">API key</label>
+          <input
+            id="api-key"
+            name="api-key"
+            type="password"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="sk-..."
+          />
+          <button id="save-api-key" class="secondary" type="submit">Save</button>
+          <button id="clear-api-key" class="secondary" type="button">Clear</button>
+          <span id="api-key-status" aria-live="polite"></span>
+        </form>
+      </details>
+
+      <section class="status-row" aria-live="polite">
+        <span class="status-dot" aria-hidden="true"></span>
+        <output id="status">Ready</output>
+        <span id="status-detail"></span>
+      </section>
+
+      <section class="transcripts" aria-label="Live translations">
+        <article class="transcript">
+          <p class="language-label">Latest speaker</p>
+          <h2 class="language-name">What was heard</h2>
+          <p id="heard-text" class="live-text" aria-live="polite"></p>
+        </article>
+        <article class="transcript">
+          <p class="language-label">English ↔ Português</p>
+          <h2 class="language-name">Translation</h2>
+          <p id="translation-text" class="live-text" aria-live="polite"></p>
+        </article>
+      </section>
+
+      <details class="technical">
+        <summary>Connection details</summary>
+        <div class="technical-grid">
+          <p id="microphone-details">Waiting for microphone</p>
+          <pre id="diagnostics"></pre>
+        </div>
+      </details>
+
+      <footer class="footer">
+        <span>English ↔ Brazilian Portuguese</span>
+        <span>One realtime interpreter session</span>
+      </footer>
+
+      <!-- biome-ignore lint/a11y/useMediaCaption: The translation panel captions this WebRTC stream. -->
+      <audio id="interpreter-audio" autoplay playsinline aria-hidden="true"></audio>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

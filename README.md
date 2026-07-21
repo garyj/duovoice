@@ -1,91 +1,91 @@
-# DuoVoice Live
+# Sther
 
-Real-time bilingual voice translator for English and Portuguese conversations. Captures microphone audio, streams it to
-Google Gemini's native audio model (or OpenAI Realtime), and plays back translated speech in real time.
+Live English and Brazilian Portuguese interpretation in a desktop browser.
+Sther listens to the conversation through one microphone and uses one OpenAI
+Realtime session to translate each spoken turn into the other language.
 
-Built for live use alongside phone calls, speak in one language, hear the translation instantly.
+The page is intentionally small. It has Start and Stop controls, a connection
+status, the speech that was heard, the latest translations, and native WebRTC
+audio playback.
 
-## How It Works
+## How it works
 
-```
-Microphone → AudioWorklet (16kHz PCM) → Gemini 2.5 Flash Native Audio → Translated speech playback
-```
-
-- Audio captured and downsampled on a dedicated real-time thread via AudioWorklet
-- Streamed to Gemini's native audio model over WebSocket
-- Translated audio played back through a separate output AudioContext
-- Live transcription displayed for both input and output
-
-## Setup
-
-**Prerequisites:** Node.js, a [Gemini API key](https://aistudio.google.com/apikey) (and optionally an OpenAI API key)
-
-1. Install dependencies:
-
-   ```
-   npm install
-   ```
-
-2. Start the dev server:
-
-   ```
-   npm run dev
-   ```
-
-The app runs at `http://localhost:3000`.
-
-Use the Settings button in the header to enter your Gemini/OpenAI API keys. Keys are stored in your browser
-localStorage and are never sent to our servers.
-
-### Optional: local dev env fallback
-
-If you prefer, you can still use `.env.local` for **localhost development only**:
-
-```
-cp .env.example .env.local
+```text
+Microphone → one gpt-realtime-2.1 WebRTC session → opposite-language speech
 ```
 
-Then edit `.env.local` and set `GEMINI_API_KEY` and/or `OPENAI_API_KEY`. These are only used by the dev server,
-and are intentionally ignored in production builds.
+- Chrome captures one microphone track with echo cancellation, noise
+  suppression, and automatic gain control.
+- A single conversation session identifies whether each turn is English or
+  Brazilian Portuguese and interprets it into the other language.
+- Semantic VAD determines when each speaker has finished. The browser decides
+  whether that turn is genuine before requesting a response.
+- `gpt-realtime-whisper` supplies the source transcript.
+- The remote stream plays through one native `<audio>` element.
+- The microphone remains live during translated audio. New speech interrupts
+  and truncates the current translation so conversation can continue naturally.
+- Chrome's WebRTC echo cancellation reduces interpreter audio returning as a
+  new user turn, while the browser retains control of response creation.
+- Each browser supplies its own OpenAI API key and negotiates the WebRTC session
+  directly with OpenAI.
 
-## Low Latency Mode
+See [the architecture note](docs/architecture/realtime-translation.md) for the
+failed dual-session design, the replacement decision, protocol details, and
+test evidence.
 
-Toggle "Low Latency" in the header to trade transcription for speed. When enabled:
+## Local setup
 
-- **Silence detection drops from 500ms to 250ms** — the model begins translating sooner after you stop speaking.
-- **Transcription is disabled** — no text appears in the chat log, but translated audio still plays back normally.
-- **Gemini reconnects automatically** when toggled mid-session; for OpenAI, a lightweight session update is sent without reconnecting.
+Requirements:
 
-Use this when you need the fastest possible turn-around during a live call and don't need a written record of the conversation.
+- Node.js 24
+- A standard [OpenAI API key](https://platform.openai.com/api-keys)
+- Desktop Chrome with microphone access
 
-> ✅ **Public deployment is supported.** Keys are stored locally in the user's browser and are never sent to our servers.
-> Requests go directly from the user's device to the provider APIs.
-
-## Public Deployment (Cloudflare Pages)
-
-This app is static and can be deployed to Cloudflare Pages.
-
-- Build command: `npm run build`
-- Output directory: `dist`
-
-Users enter their own API keys in the Settings panel after loading the site.
-
-## Environment Variables
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `GEMINI_API_KEY` | No (dev only) | — | Local dev fallback for Gemini key |
-| `OPENAI_API_KEY` | No (dev only) | — | Local dev fallback for OpenAI Realtime |
-| `OPENAI_REALTIME_MODEL` | No | `gpt-realtime` | OpenAI Realtime model name |
-| `SILENCE_DURATION_MS` | No | `600` | Milliseconds of silence before speech is considered finished |
-
-## Scripts
+Install dependencies:
 
 ```bash
-npm run dev       # Start dev server
-npm run build     # Production build
-npm run preview   # Preview production build
+npm install
 ```
+
+Start the local Vite server:
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:3000`, save your OpenAI API key in the page, allow
+microphone access, and select **Start listening**.
+
+The key is stored in that browser's local storage and sent only to OpenAI when
+the browser creates a Realtime session. Clearing site data or selecting
+**Clear** removes it. This is a deliberate personal-tool tradeoff, not an
+encrypted credential store.
+
+## Cloudflare Pages deployment
+
+Sther is a static Vite app. Configure Cloudflare Pages to run `npm run build`
+and publish `dist`. There is no server-side key or Worker. Each visitor supplies
+their own key in their own browser.
+
+## Commands
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Run the local Vite development server |
+| `npm run typecheck` | Run strict TypeScript 7 checks |
+| `npm run lint` | Run Biome CI checks |
+| `npm run format` | Apply Biome formatting and safe fixes |
+| `npm test` | Run the Vitest suite once |
+| `npm run build` | Create the Vite production build |
+| `npm run verify` | Run typecheck, lint, tests, and build |
+
+## Cost
+
+`gpt-realtime-2.1` is billed from realtime audio and text tokens. Cost therefore
+depends on turn length, conversation history, and cache use rather than a fixed
+per-minute translation rate. Check the
+[current OpenAI pricing](https://developers.openai.com/api/docs/pricing#audio-tokens)
+before sustained use.
 
 ## License
 

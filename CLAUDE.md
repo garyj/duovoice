@@ -1,76 +1,63 @@
-# CLAUDE.md
+# Sther repository guide
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## What This Is
-
-DuoVoice Live is a real-time bilingual voice translator for English ↔ Portuguese conversations. It captures microphone audio, streams it to Google Gemini 2.5 Flash native audio, and plays back the translated speech. This is a critical communication tool, it's the primary way the developer communicates with their friend across a language barrier (typically over WhatsApp calls with this app running alongside). Changes must be made carefully and tested thoroughly to avoid breaking live conversations.
+Sther is a framework-free TypeScript browser tool for English and Brazilian
+Portuguese speech interpretation. It is a critical communication tool, so
+audio, lifecycle, prompt, and credential changes require real browser
+verification.
 
 ## Commands
 
 ```bash
-npm run dev       # Start dev server at http://localhost:3000 (binds 0.0.0.0)
-npm run build     # Production build to /dist
-npm run preview   # Preview production build
+npm run dev
+npm run typecheck
+npm run lint
+npm test
+npm run build
+npm run verify
 ```
 
-No test or lint tooling is configured.
-
-## Environment Setup
-
-Requires `GEMINI_API_KEY` in `.env.local`. Vite injects it via `vite.config.ts` as both `process.env.API_KEY` and `process.env.GEMINI_API_KEY`.
+`npm run dev` serves the Vite client at `http://localhost:3000`.
 
 ## Architecture
 
-### Core Flow
+- `src/realtime.ts` owns the single OpenAI Realtime WebRTC session, transcript
+  events, and native remote audio.
+- `src/controller.ts` owns microphone capture, lifecycle state, bounded
+  reconnect delays, expiry refresh, and cleanup.
+- `src/api-key.ts` owns browser-local OpenAI API key persistence.
+- `src/session-config.ts` owns the interpreter prompt and Realtime settings.
+- `src/transcripts.ts` owns rolling source and translation text.
+- `src/main.ts` binds the controller to the small DOM interface.
+- `docs/architecture/realtime-translation.md` records the architecture decision
+  and evidence.
 
-```
-Microphone → AudioWorklet (downsample to 16kHz PCM) → Gemini streaming → Translated audio playback
-```
+Use one prompted `gpt-realtime-2.1` conversation session. Do not recreate the
+former pair of fixed-target `gpt-realtime-translate` sessions. Both sessions
+heard the same mixed room microphone and could translate each other's speaker
+output, causing missed Portuguese turns and feedback loops.
 
-**App.tsx** (~560 lines) is the central orchestrator. It manages two independent lifecycles:
+The remote stream must play through a native `<audio>` element so Chrome can use
+it as the WebRTC echo-cancellation reference. Keep the microphone live during
+output so either speaker can interrupt. Semantic VAD may interrupt and truncate
+output, but it must not create responses automatically. The browser requests a
+response only after a detected user turn is committed.
 
-1. **Audio pipeline** — mic capture, AudioWorklet, input/output AudioContexts, analyzers, gain nodes. Expensive to set up (mic permissions, worklet loading). Persists across Gemini reconnects.
-2. **Gemini session** — WebSocket connection to `gemini-2.5-flash-native-audio-preview-09-2025`. Cheap to reconnect. Wired to the audio pipeline via the worklet's `port.onmessage`.
+Do not replace this with a microphone mute or acoustic delay. Do not remove the
+client-controlled response step without a real acoustic test proving that the
+interpreter cannot respond to its own output.
 
-This separation means Gemini reconnects (health timeout, network blip) are fast — the audio pipeline stays alive.
+The user supplies a standard OpenAI API key in the page. The app stores it in
+local storage and sends it directly to OpenAI's Realtime WebRTC endpoint. Do not
+add a shared server-side key.
 
-### AudioWorklet (`public/audio-processor.js`)
+## Verification
 
-Runs on a dedicated real-time thread. Uses a pre-allocated ring buffer (Float32Array(2048)) to avoid GC pauses. Performs downsampling (linear interpolation to 16kHz) and Float32→Int16 PCM conversion on the worklet thread, keeping the main thread free.
+Before reporting completion:
 
-Buffer size of 2048 samples = ~42ms latency at 48kHz input. This is a deliberate tradeoff — smaller buffers increase CPU overhead, larger ones add perceptible delay.
-
-### Performance-Critical Patterns
-
-- **DOM refs for partial transcriptions**: Gemini sends 10-30 partial transcription updates per second during speech. These update DOM directly via refs, bypassing React re-renders entirely. Only final transcriptions commit to React state.
-- **Cached resolved session ref** (`resolvedSessionRef`): The Gemini session promise is resolved once and cached, eliminating promise microtask overhead on every audio chunk.
-- **Chunked base64 encoding**: Prevents O(n²) string concatenation in `encodeBase64`.
-- **Health monitoring**: Checks every 5s, reconnects Gemini if no response in 15s (detects silent WebSocket failures).
-
-### Components
-
-- **AudioVisualizer.tsx** — Canvas-based frequency spectrum, used for both input and output audio
-- **ChatMessage.tsx** — Message bubble with partial/final state display
-- **Sidebar.tsx** — Conversation history and session switching
-
-### Types (`types.ts`)
-
-Defines `ConnectionState` (DISCONNECTED/CONNECTING/CONNECTED/ERROR), `Message`, `BlobData`, `ChatSession`.
-
-### Audio Configuration
-
-- Input: echoCancellation, noiseSuppression, autoGainControl enabled; ideal 16kHz mono
-- Output: 24kHz AudioContext, mono, through GainNode for volume control
-- Gemini voice: "Kore", audio-only response modality
-
-## Key Constraints
-
-- The system instruction tells Gemini to ONLY translate, never respond conversationally. Do not modify this behavior.
-- Two separate AudioContexts (input at mic sample rate, output at 24kHz) — do not merge them.
-- The audio pipeline / Gemini session lifecycle separation is intentional for fast reconnects. Do not couple them.
-- Ring buffer in the worklet must remain a pre-allocated typed array (no JS arrays, no push/shift) to prevent GC clicks in real-time audio.
-
-## Documentation
-
-`docs/solutions/performance-issues/audio-pipeline-latency-optimization-20260131.md` contains a detailed write-up of all latency optimizations applied, including before/after analysis. Consult this before making audio pipeline changes.
+1. Run strict TypeScript, Biome, Vitest, and the Vite production build.
+2. Run the app through Vite.
+3. Exercise Start, English to Portuguese, Portuguese to English, Stop, and
+   restart in headed desktop Chrome.
+4. Check source and translation transcript events, native audio playback,
+   barge-in truncation, browser errors, and microphone cleanup.
+5. For audio-path changes, use the actual Linux speaker and microphone stack.
